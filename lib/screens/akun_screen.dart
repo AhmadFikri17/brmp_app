@@ -88,7 +88,7 @@ class _AkunScreenState extends State<AkunScreen> {
           children: [
             // Profile Card
             Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -100,59 +100,69 @@ class _AkunScreenState extends State<AkunScreen> {
                   ),
                 ],
               ),
-              child: Column(
+              child: Row(
                 children: [
                   CircleAvatar(
-                    radius: 45,
+                    radius: 32,
                     backgroundColor: const Color(0xFF2D6A4F),
                     child: Text(
                       _nama.isNotEmpty ? _nama[0].toUpperCase() : 'U',
                       style: const TextStyle(
-                        fontSize: 32,
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _nama,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _email,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isAdmin 
-                          ? Colors.amber.withValues(alpha: 0.2)
-                          : const Color(0xFF2D6A4F).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          isAdmin ? Icons.admin_panel_settings : Icons.person,
-                          color: isAdmin ? Colors.amber.shade700 : const Color(0xFF2D6A4F),
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
                         Text(
-                          isAdmin ? 'ADMIN' : 'USER',
+                          _nama,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _email,
                           style: TextStyle(
-                            color: isAdmin ? Colors.amber.shade700 : const Color(0xFF2D6A4F),
-                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isAdmin 
+                                ? Colors.amber.withValues(alpha: 0.2)
+                                : const Color(0xFF2D6A4F).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isAdmin ? Icons.admin_panel_settings : Icons.person,
+                                color: isAdmin ? Colors.amber.shade700 : const Color(0xFF2D6A4F),
+                                size: 13,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                isAdmin ? 'ADMIN' : 'USER',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isAdmin ? Colors.amber.shade700 : const Color(0xFF2D6A4F),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -230,6 +240,42 @@ class _AkunScreenState extends State<AkunScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Nama Lengkap',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        Text(
+                          _nama,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Email',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        Text(
+                          _email,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [

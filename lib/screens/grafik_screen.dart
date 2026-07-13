@@ -36,7 +36,7 @@ class _GrafikScreenState extends State<GrafikScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F9F9),
       appBar: AppBar(
-        title: const Text('Grafik'),
+        title: const Text('Grafik Cuaca'),
         backgroundColor: const Color(0xFF2D6A4F),
         foregroundColor: Colors.white,
         elevation: 0,

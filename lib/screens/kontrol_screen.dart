@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../widgets/bottom_nav_bar.dart';
-import '../services/firebase_service.dart';
-import 'login_screen.dart';
 
 class KontrolScreen extends StatefulWidget {
   const KontrolScreen({super.key});
@@ -92,15 +90,6 @@ class _KontrolScreenState extends State<KontrolScreen> {
     setState(() => _isLoading = false);
   }
 
-  Future<void> _logout() async {
-    await FirebaseService.logout();
-    if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -110,12 +99,6 @@ class _KontrolScreenState extends State<KontrolScreen> {
         backgroundColor: const Color(0xFF2D6A4F),
         foregroundColor: Colors.white,
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

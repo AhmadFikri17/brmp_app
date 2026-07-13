@@ -32,7 +32,7 @@ class _RiwayatScreenState extends State<RiwayatScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F9F9),
       appBar: AppBar(
-        title: const Text('Riwayat Data'),
+        title: const Text('Riwayat Data Cuaca'),
         backgroundColor: const Color(0xFF2D6A4F),
         foregroundColor: Colors.white,
         elevation: 0,

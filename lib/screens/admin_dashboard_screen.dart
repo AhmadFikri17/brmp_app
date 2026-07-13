@@ -241,6 +241,47 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
+                        // Judul Halaman
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: const Color.fromARGB(255, 255, 255, 255).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                  Icons.dashboard_outlined,
+                                  color: Color(0xFF2D6A4F),
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              const Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Monitoring Cuaca',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color.fromARGB(255, 255, 255, 255),
+                                    ),
+                                  ),
+                                  Text(
+                                    'Data cuaca real-time dari sensor',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color.fromARGB(255, 255, 255, 255),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                         // Waktu Pengukuran
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

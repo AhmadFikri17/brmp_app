@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../widgets/bottom_nav_bar.dart';
-import '../widgets/weather_card.dart';
 import '../models/weather_data.dart';
 import '../services/firebase_service.dart';
 import 'login_screen.dart';
@@ -56,30 +55,97 @@ class _UserDashboardScreenState extends State<UserDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Warna background scaffold
+    const bgColor = Color(0xFFF5F9F9);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F9F9),
+      backgroundColor: bgColor,
       body: Stack(
         children: [
-          // Background
+          // Background - Pure Green Gradient dengan transisi ke warna background
           Container(
-            height: 220,
-            decoration: const BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage('assets/images/mountain_bg.png'),
-                fit: BoxFit.cover,
+            height: 280,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFF1B5E20), // Hijau tua
+                  const Color(0xFF2E7D32), // Hijau sedang gelap
+                  const Color(0xFF388E3C), // Hijau sedang
+                  const Color(0xFF43A047), // Hijau terang
+                  const Color(0xFF66BB6A), // Hijau muda
+                  bgColor.withValues(alpha: 0.9), // Transisi ke warna background
+                  bgColor, // Sama dengan background scaffold
+                ],
+                stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 0.9, 1.0],
               ),
             ),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.4),
-                    Colors.transparent,
-                  ],
+            child: Stack(
+              children: [
+                // Decorative elements
+                Positioned(
+                  top: -50,
+                  right: -50,
+                  child: Container(
+                    width: 200,
+                    height: 200,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.05),
+                    ),
+                  ),
                 ),
-              ),
+                Positioned(
+                  top: 60,
+                  left: -30,
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.03),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 20,
+                  right: 20,
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.04),
+                    ),
+                  ),
+                ),
+                // Decorative leaf/cloud shapes
+                Positioned(
+                  top: 30,
+                  right: 80,
+                  child: Container(
+                    width: 60,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 50,
+                  right: 120,
+                  child: Container(
+                    width: 40,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           // Content
@@ -91,10 +157,17 @@ class _UserDashboardScreenState extends State<UserDashboardScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      Image.asset(
-                        'assets/icons/logo.png',
-                        width: 40,
-                        height: 40,
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Image.asset(
+                          'assets/icons/logo.png',
+                          width: 35,
+                          height: 35,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -106,9 +179,10 @@ class _UserDashboardScreenState extends State<UserDashboardScreen> {
                                 const Text(
                                   'KACANG WEATHER',
                                   style: TextStyle(
-                                    fontSize: 18,
+                                    fontSize: 17,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
+                                    letterSpacing: 0.5,
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -124,27 +198,34 @@ class _UserDashboardScreenState extends State<UserDashboardScreen> {
                                   child: Text(
                                     'USER',
                                     style: TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 9,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.white.withValues(alpha: 0.8),
+                                      color: Colors.white.withValues(alpha: 0.9),
                                     ),
                                   ),
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 2),
                             Text(
-                              'Halo, $_userName',
+                              'Halo, $_userName 👋',
                               style: const TextStyle(
-                                fontSize: 12,
+                                fontSize: 13,
                                 color: Colors.white70,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.logout, color: Colors.white),
-                        onPressed: _logout,
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.logout, color: Colors.white, size: 22),
+                          onPressed: _logout,
+                        ),
                       ),
                     ],
                   ),
@@ -155,34 +236,115 @@ class _UserDashboardScreenState extends State<UserDashboardScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
+                        // Judul Halaman
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                  Icons.dashboard_outlined,
+                                  color: Color(0xFF2D6A4F),
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              const Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Monitoring Cuaca',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Data cuaca real-time dari sensor',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                         // Waktu Pengukuran
                         Container(
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.05),
-                                blurRadius: 10,
-                                offset: const Offset(0, 2),
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 12,
+                                offset: const Offset(0, 3),
                               ),
                             ],
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(
-                                Icons.access_time,
-                                color: Color(0xFF2D6A4F),
-                                size: 16,
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2D6A4F).withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.access_time,
+                                  color: Color(0xFF2D6A4F),
+                                  size: 18,
+                                ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 10),
                               Text(
-                                'Waktu Pengukuran: ${_weatherData.tanggal} ${_weatherData.waktu}',
+                                'Update: ${_weatherData.tanggal} ${_weatherData.waktu}',
                                 style: const TextStyle(
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w500,
+                                  color: Color(0xFF2D6A4F),
+                                ),
+                              ),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade100,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.green,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Live',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green.shade700,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -196,43 +358,49 @@ class _UserDashboardScreenState extends State<UserDashboardScreen> {
                           crossAxisCount: 2,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
-                          childAspectRatio: 1.1,
+                          childAspectRatio: 1.15,
                           children: [
-                            WeatherCard(
+                            _buildWeatherCard(
                               icon: Icons.thermostat,
                               title: 'Suhu Udara',
-                              value: '${_weatherData.suhu.toStringAsFixed(1)} °C',
+                              value: '${_weatherData.suhu.toStringAsFixed(1)}°C',
                               color: const Color(0xFFFF6B6B),
+                              iconBg: const Color(0xFFFF6B6B).withValues(alpha: 0.15),
                             ),
-                            WeatherCard(
+                            _buildWeatherCard(
                               icon: Icons.water_drop,
                               title: 'Kelembapan',
-                              value: '${_weatherData.kelembapan.toStringAsFixed(1)} %',
+                              value: '${_weatherData.kelembapan.toStringAsFixed(1)}%',
                               color: const Color(0xFF4ECDC4),
+                              iconBg: const Color(0xFF4ECDC4).withValues(alpha: 0.15),
                             ),
-                            WeatherCard(
+                            _buildWeatherCard(
                               icon: Icons.wb_sunny,
                               title: 'Intensitas Cahaya',
                               value: '${_weatherData.intensitasCahaya} Lux',
                               color: const Color(0xFFFFD93D),
+                              iconBg: const Color(0xFFFFD93D).withValues(alpha: 0.15),
                             ),
-                            WeatherCard(
+                            _buildWeatherCard(
                               icon: Icons.air,
                               title: 'Kecepatan Angin',
                               value: '${_weatherData.kecepatanAngin.toStringAsFixed(1)} m/s',
                               color: const Color(0xFF6C5CE7),
+                              iconBg: const Color(0xFF6C5CE7).withValues(alpha: 0.15),
                             ),
-                            WeatherCard(
+                            _buildWeatherCard(
                               icon: Icons.explore,
                               title: 'Arah Angin',
-                              value: '${_weatherData.arahAngin.toStringAsFixed(1)} °C',
+                              value: '${_weatherData.arahAngin.toStringAsFixed(1)}°',
                               color: const Color(0xFF74B9FF),
+                              iconBg: const Color(0xFF74B9FF).withValues(alpha: 0.15),
                             ),
-                            WeatherCard(
+                            _buildWeatherCard(
                               icon: Icons.umbrella,
                               title: 'Curah Hujan',
                               value: '${_weatherData.curahHujan.toStringAsFixed(1)} mm',
                               color: const Color(0xFF00B894),
+                              iconBg: const Color(0xFF00B894).withValues(alpha: 0.15),
                             ),
                           ],
                         ),
@@ -246,33 +414,71 @@ class _UserDashboardScreenState extends State<UserDashboardScreen> {
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.05),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 2),
+                                  color: Colors.black.withValues(alpha: 0.06),
+                                  blurRadius: 15,
+                                  offset: const Offset(0, 4),
                                 ),
                               ],
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Row(
+                                Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                     Text(
-                                      'Grafik',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF2D6A4F).withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: const Icon(
+                                            Icons.show_chart,
+                                            color: Color(0xFF2D6A4F),
+                                            size: 18,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        const Text(
+                                          'Grafik 7 Hari',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    Text(
-                                      'Lihat Semua >',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Color(0xFF2D6A4F),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF2D6A4F).withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Row(
+                                        children: [
+                                          Text(
+                                            'Lihat Semua',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF2D6A4F),
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          SizedBox(width: 4),
+                                          Icon(
+                                            Icons.arrow_forward_ios,
+                                            size: 10,
+                                            color: Color(0xFF2D6A4F),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
@@ -314,6 +520,65 @@ class _UserDashboardScreenState extends State<UserDashboardScreen> {
             _selectedIndex = index;
           });
         },
+      ),
+    );
+  }
+
+  Widget _buildWeatherCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required Color color,
+    required Color iconBg,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: iconBg,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 26,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2D2D2D),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Colors.grey,
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
