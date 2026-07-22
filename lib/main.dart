@@ -93,20 +93,59 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  // Warna konsisten dengan OnboardingScreen
+  static const _darkGreen = Color(0xFF1B5E20);
+  static const _green = Color(0xFF2D6A4F);
+  static const _lightGreen = Color(0xFF66BB6A);
+  static const _cream = Color(0xFFF5F9F3);
+  
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
+
   @override
   void initState() {
     super.initState();
+    
+    // Setup animations
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeIn,
+      ),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.7, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.elasticOut,
+      ),
+    );
+
+    // Start animation
+    _animationController.forward();
+
+    // Navigate after delay
     _checkStatus();
   }
 
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
   Future<void> _checkStatus() async {
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(const Duration(seconds: 3));
 
     if (!mounted) return;
 
-    // OPSI 1: LANGSUNG KE ONBOARDING TANPA CEK
-    // Selalu tampilkan onboarding setiap kali aplikasi dibuka
     Navigator.pushReplacementNamed(context, '/onboarding');
   }
 
@@ -119,50 +158,95 @@ class _SplashScreenState extends State<SplashScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF1B5E20),
-              Color(0xFF2E7D32),
-              Color(0xFF43A047),
+              _darkGreen,
+              _green,
+              _lightGreen,
+              _cream,
             ],
+            stops: [0.0, 0.35, 0.65, 1.0],
           ),
         ),
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset(
-                'assets/icons/logo.png',
-                width: 120,
-                height: 120,
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'WEATHER STATION',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: 2,
+              // Logo dengan animasi fade dan scale
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: ScaleTransition(
+                  scale: _scaleAnimation,
+                  child: Image.asset(
+                    'assets/icons/logo.png',
+                    width: 130,
+                    height: 130,
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'BRMP Aneka Kacang',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white70,
+              
+              const SizedBox(height: 30),
+              
+              // Title dengan animasi fade
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: Column(
+                  children: [
+                    const Text(
+                      'WEATHER STATION',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 3,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'BRMP Aneka Kacang',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Monitoring Cerdas, Pertanian Berkualitas',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white70,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Monitoring Cerdas, Pertanian Berkualitas',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white54,
+              
+              const SizedBox(height: 60),
+              
+              // Loading indicator
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Colors.white,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 40),
-              const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
               ),
             ],
           ),
