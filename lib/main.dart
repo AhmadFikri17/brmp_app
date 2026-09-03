@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:device_preview/device_preview.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
 
+import 'providers/app_state.dart';
 import 'screens/login_screen.dart';
 import 'screens/user_dashboard_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
@@ -8,14 +12,14 @@ import 'screens/grafik_screen.dart';
 import 'screens/riwayat_screen.dart';
 import 'screens/akun_screen.dart';
 import 'screens/kontrol_screen.dart';
+import 'screens/kamera_screen.dart';
 import 'screens/onboarding_screen.dart';
-import 'services/firebase_service.dart';
+import 'services/firebase_service.dart' as firebase_service;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Firebase
-  await FirebaseService.initialize();
+  await Firebase.initializeApp();
+  await firebase_service.FirebaseService.initialize();
 
   runApp(
     DevicePreview(
@@ -30,58 +34,60 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      locale: DevicePreview.locale(context),
-      builder: DevicePreview.appBuilder,
-
-      title: 'Weather Station',
-      debugShowCheckedModeBanner: false,
-
-      routes: {
-        '/onboarding': (context) => const OnboardingScreen(),
-        '/login': (context) => const LoginScreen(),
-        '/user-dashboard': (context) => const UserDashboardScreen(),
-        '/admin-dashboard': (context) => const AdminDashboardScreen(),
-        '/kontrol': (context) => const KontrolScreen(),
-        '/grafik': (context) => const GrafikScreen(),
-        '/riwayat': (context) => const RiwayatScreen(),
-        '/akun': (context) => const AkunScreen(),
-      },
-
-      theme: ThemeData(
-        fontFamily: 'Poppins',
-        primaryColor: const Color(0xFF2D6A4F),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2D6A4F),
-          brightness: Brightness.light,
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF2D6A4F),
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.grey.shade100,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
+    return ChangeNotifierProvider(
+      create: (context) => AppState()..initialize(),
+      child: MaterialApp(
+        locale: DevicePreview.locale(context),
+        builder: DevicePreview.appBuilder,
+        title: 'Weather Station',
+        debugShowCheckedModeBanner: false,
+        initialRoute: '/splash',
+        routes: {
+          '/splash': (context) => const SplashScreen(),
+          '/onboarding': (context) => const OnboardingScreen(),
+          '/login': (context) => const LoginScreen(),
+          '/user-dashboard': (context) => const UserDashboardScreen(),
+          '/admin-dashboard': (context) => const AdminDashboardScreen(),
+          '/kontrol': (context) => const KontrolScreen(),
+          '/kamera': (context) => const KameraScreen(),
+          '/grafik': (context) => const GrafikScreen(),
+          '/riwayat': (context) => const RiwayatScreen(),
+          '/akun': (context) => const AkunScreen(),
+        },
+        theme: ThemeData(
+          fontFamily: 'Poppins',
+          primaryColor: const Color(0xFF2D6A4F),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF2D6A4F),
+            brightness: Brightness.light,
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Color(0xFF2D6A4F),
+            foregroundColor: Colors.white,
+            elevation: 0,
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
-              color: Color(0xFF2D6A4F),
-              width: 2,
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: Colors.grey.shade100,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(
+                color: Color(0xFF2D6A4F),
+                width: 2,
+              ),
             ),
           ),
         ),
+        home: null,
       ),
-
-      home: const SplashScreen(),
     );
   }
 }
@@ -94,7 +100,6 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
-  // Warna konsisten dengan OnboardingScreen
   static const _darkGreen = Color(0xFF1B5E20);
   static const _green = Color(0xFF2D6A4F);
   static const _lightGreen = Color(0xFF66BB6A);
@@ -108,7 +113,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   void initState() {
     super.initState();
     
-    // Setup animations
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
@@ -128,10 +132,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       ),
     );
 
-    // Start animation
     _animationController.forward();
-
-    // Navigate after delay
     _checkStatus();
   }
 
@@ -146,7 +147,36 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     if (!mounted) return;
 
-    Navigator.pushReplacementNamed(context, '/onboarding');
+    try {
+      User? currentUser = FirebaseAuth.instance.currentUser;
+      
+      if (currentUser != null) {
+        String uid = currentUser.uid;
+        String role = await firebase_service.FirebaseService.getUserRole(uid) ?? '';
+        
+        if (!mounted) return;
+        
+        final appState = Provider.of<AppState>(context, listen: false);
+        appState.setUser(currentUser);
+        appState.setUserRole(role == 'admin' ? AppRole.admin : AppRole.user);
+        
+        if (!mounted) return;
+        
+        if (role == 'admin') {
+          Navigator.pushReplacementNamed(context, '/admin-dashboard');
+        } else if (role == 'user') {
+          Navigator.pushReplacementNamed(context, '/user-dashboard');
+        } else {
+          Navigator.pushReplacementNamed(context, '/onboarding');
+        }
+      } else {
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/onboarding');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/onboarding');
+    }
   }
 
   @override
@@ -170,7 +200,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo dengan animasi fade dan scale
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: ScaleTransition(
@@ -182,10 +211,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   ),
                 ),
               ),
-              
               const SizedBox(height: 30),
-              
-              // Title dengan animasi fade
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: Column(
@@ -231,10 +257,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   ],
                 ),
               ),
-              
               const SizedBox(height: 60),
-              
-              // Loading indicator
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: const SizedBox(

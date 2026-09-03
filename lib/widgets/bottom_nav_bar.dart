@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/navigation_service.dart';
 
 class BottomNavBar extends StatefulWidget {
   final int selectedIndex;
@@ -25,6 +26,25 @@ class _BottomNavBarState extends State<BottomNavBar> {
     super.initState();
     _currentIndex = widget.selectedIndex;
     _loadUserRole();
+    
+    // Listen for navigation index changes
+    final navService = NavigationService();
+    navService.addListener(_onNavigationIndexChanged);
+  }
+
+  @override
+  void dispose() {
+    final navService = NavigationService();
+    navService.removeListener(_onNavigationIndexChanged);
+    super.dispose();
+  }
+
+  void _onNavigationIndexChanged(int index) {
+    if (mounted && _currentIndex != index) {
+      setState(() {
+        _currentIndex = index;
+      });
+    }
   }
 
   @override
@@ -60,9 +80,6 @@ class _BottomNavBarState extends State<BottomNavBar> {
         ),
       );
     }
-
-    // Hapus isAdmin local variable karena tidak digunakan
-    // final isAdmin = _userRole == 'admin';
 
     return Container(
       decoration: BoxDecoration(
