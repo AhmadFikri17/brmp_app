@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'providers/app_state.dart';
+import 'services/mqtt_service.dart';
+import 'services/weather_mqtt_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/user_dashboard_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
@@ -34,8 +36,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => AppState()..initialize(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => AppState()..initialize()),
+        ChangeNotifierProvider(create: (context) => MQTTService()),
+        ChangeNotifierProvider(create: (context) => WeatherMQTTService()),
+      ],
       child: MaterialApp(
         locale: DevicePreview.locale(context),
         builder: DevicePreview.appBuilder,

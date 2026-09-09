@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../models/weather_data.dart';
 import '../services/firebase_service.dart';
+import '../services/weather_mqtt_service.dart';
 import 'login_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -13,23 +14,31 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _selectedIndex = 0;
-  late WeatherData _weatherData;
+  WeatherData? _weatherData;
   String _userName = 'Admin';
+  late WeatherMQTTService _weatherMQTT;
+  bool _isDataAvailable = false;
 
   @override
   void initState() {
     super.initState();
-    _weatherData = WeatherData(
-      suhu: 28.6,
-      kelembapan: 78.4,
-      intensitasCahaya: 865,
-      kecepatanAngin: 3.2,
-      arahAngin: 21.6,
-      curahHujan: 1.4,
-      tanggal: '06 Jul 2026',
-      waktu: '11.38',
-    );
     _loadUserName();
+    
+    // Inisialisasi Weather MQTT
+    _weatherMQTT = WeatherMQTTService();
+    _weatherMQTT.connect();
+    
+    // Listen untuk update data
+    _weatherMQTT.weatherStream.listen((data) {
+      if (mounted) {
+        setState(() {
+          _weatherData = data;
+          _isDataAvailable = true;
+          debugPrint('🌤️ Weather updated: ${data.toString()}');
+        });
+        // Data sudah otomatis disimpan per jam di service
+      }
+    });
   }
 
   Future<void> _loadUserName() async {
@@ -54,15 +63,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   @override
+  void dispose() {
+    _weatherMQTT.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Warna background scaffold
     const bgColor = Color(0xFFF5F9F9);
 
     return Scaffold(
       backgroundColor: bgColor,
       body: Stack(
         children: [
-          // Background - Pure Green Gradient dengan transisi ke warna background
+          // Background
           Container(
             height: 280,
             decoration: BoxDecoration(
@@ -70,20 +84,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  const Color(0xFF1B5E20), // Hijau tua
-                  const Color(0xFF2E7D32), // Hijau sedang gelap
-                  const Color(0xFF388E3C), // Hijau sedang
-                  const Color(0xFF43A047), // Hijau terang
-                  const Color(0xFF66BB6A), // Hijau muda
-                  bgColor.withValues(alpha: 0.9), // Transisi ke warna background
-                  bgColor, // Sama dengan background scaffold
+                  const Color(0xFF1B5E20),
+                  const Color(0xFF2E7D32),
+                  const Color(0xFF388E3C),
+                  const Color(0xFF43A047),
+                  const Color(0xFF66BB6A),
+                  bgColor.withValues(alpha: 0.9),
+                  bgColor,
                 ],
                 stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 0.9, 1.0],
               ),
             ),
             child: Stack(
               children: [
-                // Decorative elements
                 Positioned(
                   top: -50,
                   right: -50,
@@ -120,7 +133,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ),
                   ),
                 ),
-                // Decorative leaf/cloud shapes
                 Positioned(
                   top: 30,
                   right: 80,
@@ -152,7 +164,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           SafeArea(
             child: Column(
               children: [
-                // Header with admin info
+                // Header
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -167,6 +179,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           'assets/icons/logo.png',
                           width: 35,
                           height: 35,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(Icons.cloud, color: Colors.white, size: 35);
+                          },
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -241,7 +256,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        // Judul Halaman
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: Row(
@@ -249,7 +263,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: const Color.fromARGB(255, 255, 255, 255).withValues(alpha: 0.15),
+                                  color: Colors.white.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: const Icon(
@@ -267,14 +281,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
-                                      color: Color.fromARGB(255, 255, 255, 255),
+                                      color: Colors.white,
                                     ),
                                   ),
                                   Text(
                                     'Data cuaca real-time dari sensor',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Color.fromARGB(255, 255, 255, 255),
+                                      color: Colors.white70,
                                     ),
                                   ),
                                 ],
@@ -313,7 +327,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               ),
                               const SizedBox(width: 10),
                               Text(
-                                'Update: ${_weatherData.tanggal} ${_weatherData.waktu}',
+                                _isDataAvailable && _weatherData != null
+                                    ? 'Update: ${_weatherData!.tanggal} ${_weatherData!.waktu}'
+                                    : 'Menunggu data...',
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
@@ -327,7 +343,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.green.shade100,
+                                  color: _weatherMQTT.connectionState == WeatherConnectionState.connected
+                                      ? Colors.green.shade100
+                                      : Colors.red.shade100,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Row(
@@ -335,18 +353,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                     Container(
                                       width: 6,
                                       height: 6,
-                                      decoration: const BoxDecoration(
-                                        color: Colors.green,
+                                      decoration: BoxDecoration(
+                                        color: _weatherMQTT.connectionState == WeatherConnectionState.connected
+                                            ? Colors.green
+                                            : Colors.red,
                                         shape: BoxShape.circle,
                                       ),
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'Live',
+                                      _weatherMQTT.connectionState == WeatherConnectionState.connected
+                                          ? 'Live'
+                                          : 'Offline',
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.green.shade700,
+                                        color: _weatherMQTT.connectionState == WeatherConnectionState.connected
+                                            ? Colors.green.shade700
+                                            : Colors.red.shade700,
                                       ),
                                     ),
                                   ],
@@ -368,52 +392,64 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             _buildWeatherCard(
                               icon: Icons.thermostat,
                               title: 'Suhu Udara',
-                              value: '${_weatherData.suhu.toStringAsFixed(1)}°C',
+                              value: _isDataAvailable && _weatherData != null
+                                  ? '${_weatherData!.suhu.toStringAsFixed(1)}°C'
+                                  : '-',
                               color: const Color(0xFFFF6B6B),
                               iconBg: const Color(0xFFFF6B6B).withValues(alpha: 0.15),
                             ),
                             _buildWeatherCard(
                               icon: Icons.water_drop,
                               title: 'Kelembapan',
-                              value: '${_weatherData.kelembapan.toStringAsFixed(1)}%',
+                              value: _isDataAvailable && _weatherData != null
+                                  ? '${_weatherData!.kelembapan.toStringAsFixed(1)}%'
+                                  : '-',
                               color: const Color(0xFF4ECDC4),
                               iconBg: const Color(0xFF4ECDC4).withValues(alpha: 0.15),
                             ),
                             _buildWeatherCard(
                               icon: Icons.wb_sunny,
                               title: 'Intensitas Cahaya',
-                              value: '${_weatherData.intensitasCahaya} Lux',
+                              value: _isDataAvailable && _weatherData != null
+                                  ? '${_weatherData!.intensitasCahaya} Lux'
+                                  : '-',
                               color: const Color(0xFFFFD93D),
                               iconBg: const Color(0xFFFFD93D).withValues(alpha: 0.15),
                             ),
                             _buildWeatherCard(
                               icon: Icons.air,
                               title: 'Kecepatan Angin',
-                              value: '${_weatherData.kecepatanAngin.toStringAsFixed(1)} m/s',
+                              value: _isDataAvailable && _weatherData != null
+                                  ? '${_weatherData!.kecepatanAngin.toStringAsFixed(1)} m/s'
+                                  : '-',
                               color: const Color(0xFF6C5CE7),
                               iconBg: const Color(0xFF6C5CE7).withValues(alpha: 0.15),
                             ),
                             _buildWeatherCard(
                               icon: Icons.explore,
                               title: 'Arah Angin',
-                              value: '${_weatherData.arahAngin.toStringAsFixed(1)}°',
+                              value: _isDataAvailable && _weatherData != null
+                                  ? '${_weatherData!.arahAngin.toStringAsFixed(1)}°'
+                                  : '-',
                               color: const Color(0xFF74B9FF),
                               iconBg: const Color(0xFF74B9FF).withValues(alpha: 0.15),
                             ),
                             _buildWeatherCard(
                               icon: Icons.umbrella,
                               title: 'Curah Hujan',
-                              value: '${_weatherData.curahHujan.toStringAsFixed(1)} mm',
+                              value: _isDataAvailable && _weatherData != null
+                                  ? '${_weatherData!.curahHujan.toStringAsFixed(1)} mm'
+                                  : '-',
                               color: const Color(0xFF00B894),
                               iconBg: const Color(0xFF00B894).withValues(alpha: 0.15),
                             ),
                           ],
                         ),
                         const SizedBox(height: 16),
-                        // Grafik Preview - click to navigate
+                        // Grafik Preview
                         GestureDetector(
                           onTap: () {
-                            Navigator.pushReplacementNamed(context, '/grafik');
+                            Navigator.pushNamed(context, '/grafik');
                           },
                           child: Container(
                             padding: const EdgeInsets.all(16),
@@ -498,6 +534,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                       const SizedBox(width: 8),
                                       _buildChartChip('Kelembapan', const Color(0xFF4ECDC4)),
                                       const SizedBox(width: 8),
+                                      _buildChartChip('Cahaya', const Color(0xFFFFD93D)),
+                                      const SizedBox(width: 8),
                                       _buildChartChip('Angin', const Color(0xFF6C5CE7)),
                                       const SizedBox(width: 8),
                                       _buildChartChip('Hujan', const Color(0xFF00B894)),
@@ -567,10 +605,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           const SizedBox(height: 8),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF2D2D2D),
+              color: value == '-' ? Colors.grey : const Color(0xFF2D2D2D),
             ),
             textAlign: TextAlign.center,
           ),
@@ -591,7 +629,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget _buildChartChip(String label, Color color) {
     return GestureDetector(
       onTap: () {
-        Navigator.pushReplacementNamed(context, '/grafik');
+        Navigator.pushNamed(context, '/grafik');
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
