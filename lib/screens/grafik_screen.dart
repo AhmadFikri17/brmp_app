@@ -135,7 +135,10 @@ class _GrafikScreenState extends State<GrafikScreen> {
     final Map<String, HourlyWeatherData> uniqueData = {};
     
     for (var data in _historicalData) {
-      final key = '${data.timestamp.year}-${data.timestamp.month}-${data.timestamp.day}_${data.timestamp.hour}';
+      final key = '${data.timestamp.year}-'
+                  '${data.timestamp.month.toString().padLeft(2, '0')}-'
+                  '${data.timestamp.day.toString().padLeft(2, '0')}_'
+                  '${data.timestamp.hour.toString().padLeft(2, '0')}';
       
       if (!uniqueData.containsKey(key)) {
         uniqueData[key] = data;
@@ -147,6 +150,8 @@ class _GrafikScreenState extends State<GrafikScreen> {
     }
     
     List<HourlyWeatherData> result = uniqueData.values.toList();
+    
+    // Sort berdasarkan DateTime
     result.sort((a, b) => a.timestamp.compareTo(b.timestamp));
     
     return result;
@@ -170,21 +175,22 @@ class _GrafikScreenState extends State<GrafikScreen> {
   List<HourlyWeatherData> _aggregateByDay(List<HourlyWeatherData> data) {
     if (data.isEmpty) return [];
     
-    final Map<String, List<HourlyWeatherData>> groupedByDay = {};
+    final Map<DateTime, List<HourlyWeatherData>> groupedByDay = {};
     
     for (var d in data) {
-      final key = '${d.timestamp.year}-${d.timestamp.month}-${d.timestamp.day}';
-      if (!groupedByDay.containsKey(key)) {
-        groupedByDay[key] = [];
+      final dateKey = DateTime(d.timestamp.year, d.timestamp.month, d.timestamp.day);
+      if (!groupedByDay.containsKey(dateKey)) {
+        groupedByDay[dateKey] = [];
       }
-      groupedByDay[key]!.add(d);
+      groupedByDay[dateKey]!.add(d);
     }
     
     final List<HourlyWeatherData> result = [];
-    final sortedKeys = groupedByDay.keys.toList()..sort();
+    final sortedKeys = groupedByDay.keys.toList()
+      ..sort((a, b) => a.compareTo(b));
     
-    for (var key in sortedKeys) {
-      final dayData = groupedByDay[key]!;
+    for (var dateKey in sortedKeys) {
+      final dayData = groupedByDay[dateKey]!;
       if (dayData.isEmpty) continue;
       
       double avgTemp = 0;
@@ -208,11 +214,10 @@ class _GrafikScreenState extends State<GrafikScreen> {
       avgWind /= count;
       avgRain /= count;
       
-      final firstData = dayData.first;
       final aggregatedDate = DateTime(
-        firstData.timestamp.year,
-        firstData.timestamp.month,
-        firstData.timestamp.day,
+        dateKey.year,
+        dateKey.month,
+        dateKey.day,
         12, 0, 0
       );
       
@@ -225,7 +230,7 @@ class _GrafikScreenState extends State<GrafikScreen> {
         windAngle: 0,
         windDirection: '--',
         rainDailyMm: avgRain,
-        lux: avgLux.round(),
+        lux: avgLux, // <-- TIDAK LAGI .round(), karena lux adalah double
       ));
     }
     
@@ -236,24 +241,36 @@ class _GrafikScreenState extends State<GrafikScreen> {
   List<HourlyWeatherData> _aggregateByWeek(List<HourlyWeatherData> data) {
     if (data.isEmpty) return [];
     
-    final Map<int, List<HourlyWeatherData>> groupedByWeek = {};
+    final sortedData = List<HourlyWeatherData>.from(data)
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
     
-    for (var d in data) {
-      final firstDate = data.first.timestamp;
-      final diff = d.timestamp.difference(firstDate);
+    final Map<DateTime, List<HourlyWeatherData>> groupedByWeek = {};
+    
+    final firstDate = sortedData.first.timestamp;
+    final firstWeekStart = DateTime(
+      firstDate.year, 
+      firstDate.month, 
+      firstDate.day
+    );
+    
+    for (var d in sortedData) {
+      final diff = d.timestamp.difference(firstWeekStart);
       final weekNumber = (diff.inDays / 7).floor();
       
-      if (!groupedByWeek.containsKey(weekNumber)) {
-        groupedByWeek[weekNumber] = [];
+      final weekKey = firstWeekStart.add(Duration(days: weekNumber * 7));
+      
+      if (!groupedByWeek.containsKey(weekKey)) {
+        groupedByWeek[weekKey] = [];
       }
-      groupedByWeek[weekNumber]!.add(d);
+      groupedByWeek[weekKey]!.add(d);
     }
     
     final List<HourlyWeatherData> result = [];
-    final sortedKeys = groupedByWeek.keys.toList()..sort();
+    final sortedKeys = groupedByWeek.keys.toList()
+      ..sort((a, b) => a.compareTo(b));
     
-    for (var key in sortedKeys) {
-      final weekData = groupedByWeek[key]!;
+    for (var weekKey in sortedKeys) {
+      final weekData = groupedByWeek[weekKey]!;
       if (weekData.isEmpty) continue;
       
       double avgTemp = 0;
@@ -277,11 +294,10 @@ class _GrafikScreenState extends State<GrafikScreen> {
       avgWind /= count;
       avgRain /= count;
       
-      final firstData = weekData.first;
       final midWeek = DateTime(
-        firstData.timestamp.year,
-        firstData.timestamp.month,
-        firstData.timestamp.day + 3,
+        weekKey.year,
+        weekKey.month,
+        weekKey.day + 3,
         12, 0, 0
       );
       
@@ -294,7 +310,7 @@ class _GrafikScreenState extends State<GrafikScreen> {
         windAngle: 0,
         windDirection: '--',
         rainDailyMm: avgRain,
-        lux: avgLux.round(),
+        lux: avgLux, // <-- TIDAK LAGI .round()
       ));
     }
     
@@ -349,32 +365,40 @@ class _GrafikScreenState extends State<GrafikScreen> {
     return {'minY': 0, 'maxY': 100, 'interval': 10};
   }
 
+  // ===== KONFIGURASI SKALA Y UNTUK CAHAYA (LUX) =====
+  // Handle nilai lux hingga 10000+ 
   Map<String, double> _getCahayaConfig(double minValue, double maxValue) {
     double maxY = maxValue;
+    double interval;
     
-    if (maxY <= 100) {
+    // Tentukan maxY dan interval berdasarkan nilai maksimum
+    if (maxY <= 50) {
+      maxY = 50;
+      interval = 5;
+    } else if (maxY <= 100) {
       maxY = 100;
+      interval = 10;
+    } else if (maxY <= 250) {
+      maxY = (maxY / 50).ceilToDouble() * 50;
+      interval = 50;
     } else if (maxY <= 500) {
       maxY = (maxY / 100).ceilToDouble() * 100;
+      interval = 100;
     } else if (maxY <= 1000) {
-      maxY = (maxY / 100).ceilToDouble() * 100;
+      maxY = (maxY / 200).ceilToDouble() * 200;
+      interval = 200;
+    } else if (maxY <= 2000) {
+      maxY = (maxY / 500).ceilToDouble() * 500;
+      interval = 500;
     } else if (maxY <= 5000) {
       maxY = (maxY / 500).ceilToDouble() * 500;
-    } else {
-      maxY = (maxY / 1000).ceilToDouble() * 1000;
-    }
-    
-    double interval;
-    if (maxY <= 100) {
-      interval = 10;
-    } else if (maxY <= 500) {
-      interval = 50;
-    } else if (maxY <= 1000) {
-      interval = 100;
-    } else if (maxY <= 5000) {
       interval = 500;
-    } else {
+    } else if (maxY <= 10000) {
+      maxY = (maxY / 1000).ceilToDouble() * 1000;
       interval = 1000;
+    } else {
+      maxY = (maxY / 2000).ceilToDouble() * 2000;
+      interval = 2000;
     }
     
     return {'minY': 0, 'maxY': maxY, 'interval': interval};
@@ -404,8 +428,13 @@ class _GrafikScreenState extends State<GrafikScreen> {
     return {'minY': minY, 'maxY': maxY, 'interval': interval};
   }
 
+  // ===== FORMAT LABEL Y =====
   String _formatYLabel(double value) {
+    // Untuk lux yang bisa ribuan, tampilkan dengan pemisah ribuan
     if (_selectedChart == 'Cahaya') {
+      if (value >= 1000) {
+        return '${(value / 1000).toStringAsFixed(value % 1000 == 0 ? 0 : 1)}k';
+      }
       return value.toInt().toString();
     }
     return value.toInt().toString();
@@ -438,12 +467,18 @@ class _GrafikScreenState extends State<GrafikScreen> {
         _historicalError = null;
         
         debugPrint('📊 Loaded ${_historicalData.length} raw data, processed to ${_processedHistoricalData.length} unique data, aggregated to ${_aggregatedData.length} data');
+        
+        // Debug: tampilkan urutan tanggal
+        for (var d in _aggregatedData) {
+          debugPrint('  📅 ${d.timestamp} | Lux: ${d.lux.toStringAsFixed(1)}');
+        }
       });
     } catch (e) {
       setState(() {
         _historicalError = e.toString();
         _isLoadingHistorical = false;
       });
+      debugPrint('❌ Error loading historical: $e');
     }
   }
 
@@ -566,11 +601,9 @@ class _GrafikScreenState extends State<GrafikScreen> {
 
   // ===== EXPORT CSV =====
   Future<void> _exportCSV() async {
-    // Ambil data yang akan diekspor (prioritaskan data agregasi)
     List<dynamic> dataToExport = [];
     String header = '';
     
-    // Cek apakah ada data historis
     if (_aggregatedData.isNotEmpty) {
       dataToExport = _aggregatedData;
       header = 'Tanggal,Jam,Suhu(°C),Kelembapan(%),Cahaya(Lux),Angin(m/s),Hujan(mm)\n';
@@ -594,19 +627,17 @@ class _GrafikScreenState extends State<GrafikScreen> {
       String csv = header;
       
       if (dataToExport.isNotEmpty && dataToExport.first is HourlyWeatherData) {
-        // Export data historis
         for (var data in dataToExport as List<HourlyWeatherData>) {
           final dateStr = '${data.timestamp.year}-${_padZero(data.timestamp.month)}-${_padZero(data.timestamp.day)}';
           final timeStr = '${_padZero(data.timestamp.hour)}:00';
           csv += '$dateStr,$timeStr,'
                  '${data.temperature.toStringAsFixed(1)},'
                  '${data.humidity.toStringAsFixed(1)},'
-                 '${data.lux},'
+                 '${data.lux.toStringAsFixed(2)},' // <-- 2 desimal untuk lux
                  '${data.windSpeedMs.toStringAsFixed(1)},'
                  '${data.rainDailyMm.toStringAsFixed(1)}\n';
         }
       } else if (dataToExport.isNotEmpty && dataToExport.first is WeatherData) {
-        // Export data MQTT
         for (var data in dataToExport as List<WeatherData>) {
           csv += '${data.tanggal},${data.waktu},'
                  '${data.suhu.toStringAsFixed(1)},'
@@ -644,7 +675,6 @@ class _GrafikScreenState extends State<GrafikScreen> {
 
   // ===== EXPORT PDF =====
   Future<void> _exportPDF() async {
-    // Ambil data yang akan diekspor
     List<dynamic> dataToExport = [];
     String title = '';
     
@@ -771,7 +801,7 @@ class _GrafikScreenState extends State<GrafikScreen> {
                           ),
                           pw.Padding(
                             padding: const pw.EdgeInsets.all(4),
-                            child: pw.Text('${data.lux} Lux', style: const pw.TextStyle(fontSize: 9)),
+                            child: pw.Text('${data.lux.toStringAsFixed(0)} Lux', style: const pw.TextStyle(fontSize: 9)),
                           ),
                           pw.Padding(
                             padding: const pw.EdgeInsets.all(4),
@@ -913,7 +943,7 @@ class _GrafikScreenState extends State<GrafikScreen> {
       case 'Kelembapan':
         return data.map((d) => d.humidity).toList();
       case 'Cahaya':
-        return data.map((d) => d.lux.toDouble()).toList();
+        return data.map((d) => d.lux).toList(); // <-- lux sudah double, tidak perlu .toDouble()
       case 'Angin':
         return data.map((d) => d.windSpeedMs).toList();
       case 'Hujan':
@@ -929,14 +959,11 @@ class _GrafikScreenState extends State<GrafikScreen> {
     
     return data.map((d) {
       if (_selectedPeriod == HistoricalPeriod.today) {
-        // Hari Ini: tampilkan jam (06, 07, 08, ... 18)
         return d.timestamp.hour.toString().padLeft(2, '0');
       } else if (_selectedPeriod == HistoricalPeriod.sevenDays) {
-        // 7 Hari: tampilkan hari (Sen, Sel, Rab, dst)
         final days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
         return days[d.timestamp.weekday - 1];
       } else {
-        // 30 Hari: tampilkan minggu ke berapa
         final firstDate = _aggregatedData.isNotEmpty ? _aggregatedData.first.timestamp : DateTime.now();
         final diff = d.timestamp.difference(firstDate);
         final weekNumber = (diff.inDays / 7).floor() + 1;
@@ -998,7 +1025,6 @@ class _GrafikScreenState extends State<GrafikScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          // Tombol Refresh
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _isLoading ? null : () {
@@ -1007,7 +1033,6 @@ class _GrafikScreenState extends State<GrafikScreen> {
               _showSnackbar('Memuat ulang data...');
             },
           ),
-          // Tombol Export
           PopupMenuButton<String>(
             icon: _isExporting 
                 ? const SizedBox(
@@ -1137,7 +1162,6 @@ class _GrafikScreenState extends State<GrafikScreen> {
         },
         child: Column(
           children: [
-            // Filter Chip Chart
             Container(
               padding: const EdgeInsets.all(12),
               color: Colors.white,
@@ -1159,7 +1183,6 @@ class _GrafikScreenState extends State<GrafikScreen> {
                 ),
               ),
             ),
-            // Content
             Expanded(
               child: _isLoadingHistorical
                   ? const Center(
@@ -1266,10 +1289,8 @@ class _GrafikScreenState extends State<GrafikScreen> {
                               physics: const AlwaysScrollableScrollPhysics(),
                               child: Column(
                                 children: [
-                                  // Card Grafik
                                   _buildHistoricalChartCard(),
                                   const SizedBox(height: 16),
-                                  // Info tambahan
                                   Container(
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
@@ -1449,7 +1470,6 @@ class _GrafikScreenState extends State<GrafikScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // Grafik
           SizedBox(
             height: 280,
             child: LineChart(
@@ -1565,11 +1585,18 @@ class _GrafikScreenState extends State<GrafikScreen> {
                         final index = spot.x.toInt();
                         double value = spot.y;
                         String displayValue;
+                        
+                        // Format khusus untuk Cahaya (lux)
                         if (_selectedChart == 'Cahaya') {
-                          displayValue = '${value.toInt()}$unit';
+                          if (value >= 1000) {
+                            displayValue = '${value.toStringAsFixed(0)}$unit';
+                          } else {
+                            displayValue = '${value.toStringAsFixed(1)}$unit';
+                          }
                         } else {
                           displayValue = '${value.toStringAsFixed(1)}$unit';
                         }
+                        
                         String label = index < labels.length ? labels[index] : '';
                         return LineTooltipItem(
                           '$label\n$displayValue',
@@ -1611,8 +1638,12 @@ class _GrafikScreenState extends State<GrafikScreen> {
     String unit = _chartUnits[_selectedChart] ?? '';
 
     String formatValue(double value) {
+      // Format khusus untuk Cahaya (lux) yang bisa ribuan
       if (_selectedChart == 'Cahaya') {
-        return '${value.toInt()}$unit';
+        if (value >= 1000) {
+          return '${value.toStringAsFixed(0)}$unit';
+        }
+        return '${value.toStringAsFixed(1)}$unit';
       }
       return '${value.toStringAsFixed(1)}$unit';
     }

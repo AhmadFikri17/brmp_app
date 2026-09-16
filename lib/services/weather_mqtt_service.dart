@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/weather_data.dart';
 
 enum WeatherConnectionState {
@@ -33,17 +32,6 @@ class WeatherMQTTService extends ChangeNotifier {
   WeatherData? _currentWeather;
   WeatherData? get currentWeather => _currentWeather;
 
-  // History untuk grafik (data per jam)
-  final List<WeatherData> _weatherHistory = [];
-  List<WeatherData> get weatherHistory => _weatherHistory;
-  
-  // Buffer untuk data mentah (untuk perhitungan rata-rata per jam)
-  final List<WeatherData> _rawDataBuffer = [];
-  String _currentHourKey = '';
-  
-  // Batas maksimum data history (per jam)
-  static const int maxHistoryLength = 720; // 30 hari x 24 jam
-
   // Stream Controllers
   final StreamController<WeatherData> _weatherStreamController = 
       StreamController<WeatherData>.broadcast();
@@ -55,66 +43,6 @@ class WeatherMQTTService extends ChangeNotifier {
 
   WeatherMQTTService() {
     _initClient();
-    _loadHistoryFromStorage();
-  }
-
-  // ==================== LOAD HISTORY DARI STORAGE ====================
-  Future<void> _loadHistoryFromStorage() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final historyJson = prefs.getStringList('weather_history_hourly') ?? [];
-      
-      if (historyJson.isNotEmpty) {
-        final List<WeatherData> history = [];
-        for (var json in historyJson) {
-          try {
-            final parts = json.split('|');
-            if (parts.length == 9) {
-              final data = WeatherData(
-                suhu: double.tryParse(parts[0]) ?? 0,
-                kelembapan: double.tryParse(parts[1]) ?? 0,
-                intensitasCahaya: int.tryParse(parts[2]) ?? 0,
-                kecepatanAngin: double.tryParse(parts[3]) ?? 0,
-                kecepatanAnginKnot: double.tryParse(parts[4]) ?? 0,
-                arahAngin: double.tryParse(parts[5]) ?? 0,
-                curahHujan: double.tryParse(parts[6]) ?? 0,
-                tanggal: parts[7],
-                waktu: parts[8],
-              );
-              history.add(data);
-            }
-          } catch (e) {
-            debugPrint('Error parsing history: $e');
-          }
-        }
-        _weatherHistory.clear();
-        _weatherHistory.addAll(history);
-        debugPrint('📂 Loaded ${_weatherHistory.length} hourly data from storage');
-      }
-    } catch (e) {
-      debugPrint('Error loading history: $e');
-    }
-  }
-
-  // ==================== SIMPAN HISTORY KE STORAGE ====================
-  Future<void> _saveHistoryToStorage() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final List<String> historyJson = [];
-      
-      for (var data in _weatherHistory) {
-        final json = '${data.suhu}|${data.kelembapan}|${data.intensitasCahaya}|'
-                     '${data.kecepatanAngin}|${data.kecepatanAnginKnot}|'
-                     '${data.arahAngin}|${data.curahHujan}|'
-                     '${data.tanggal}|${data.waktu}';
-        historyJson.add(json);
-      }
-      
-      await prefs.setStringList('weather_history_hourly', historyJson);
-      debugPrint('💾 Saved ${_weatherHistory.length} hourly data to storage');
-    } catch (e) {
-      debugPrint('Error saving history: $e');
-    }
   }
 
   // ==================== INIT CLIENT ====================
@@ -186,7 +114,6 @@ class WeatherMQTTService extends ChangeNotifier {
       double windSpeed = 0;
       double windKnot = 0;
       double windAngle = 0;
-      // windDirection digunakan untuk debug
       String windDirection = '--';
       double rainDaily = 0;
       int lux = 0;
@@ -229,29 +156,52 @@ class WeatherMQTTService extends ChangeNotifier {
         }
       }
       
-      // Parse timestamp
+      // ===== PARSE TIMESTAMP DENGAN FALLBACK =====
       String date = '';
       String time = '';
-      String hourKey = '';
       
       if (timestamp.isNotEmpty) {
-        final parts2 = timestamp.split(' ');
-        if (parts2.length == 2) {
-          final dateParts = parts2[0].split('-');
-          if (dateParts.length == 3) {
-            final months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-            final month = months[int.parse(dateParts[1]) - 1];
-            date = '${int.parse(dateParts[2])} $month ${dateParts[0]}';
+        try {
+          final parts2 = timestamp.split(' ');
+          if (parts2.length == 2) {
+            // Parse tanggal (YYYY-MM-DD)
+            final dateParts = parts2[0].split('-');
+            if (dateParts.length == 3) {
+              final year = int.tryParse(dateParts[0]) ?? 0;
+              final month = int.tryParse(dateParts[1]) ?? 1;
+              final day = int.tryParse(dateParts[2]) ?? 1;
+              
+              final months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 
+                              'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+              final monthName = (month >= 1 && month <= 12) ? months[month - 1] : 'Jan';
+              date = '$day $monthName $year';
+            }
+            
+            // Parse waktu (HH:MM:SS)
+            final timeParts = parts2[1].split(':');
+            if (timeParts.length >= 2) {
+              time = '${timeParts[0]}.${timeParts[1]}';
+            }
           }
-          
-          // Ambil jam untuk key (YYYY-MM-DD HH)
-          hourKey = '${parts2[0]} ${parts2[1].substring(0, 2)}';
-          
-          final timeParts = parts2[1].split(':');
-          if (timeParts.length >= 2) {
-            time = '${timeParts[0]}.${timeParts[1]}';
-          }
+        } catch (e) {
+          debugPrint('Error parsing timestamp: $e');
         }
+      }
+      
+      // FALLBACK: Jika parsing gagal, gunakan waktu sekarang
+      if (date.isEmpty || time.isEmpty) {
+        final now = DateTime.now();
+        final months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 
+                        'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        
+        if (date.isEmpty) {
+          date = '${now.day} ${months[now.month - 1]} ${now.year}';
+        }
+        if (time.isEmpty) {
+          time = '${now.hour.toString().padLeft(2, '0')}.${now.minute.toString().padLeft(2, '0')}';
+        }
+        
+        debugPrint('⚠️ Using fallback time: $date $time');
       }
       
       final weatherData = WeatherData(
@@ -270,105 +220,11 @@ class WeatherMQTTService extends ChangeNotifier {
       _weatherStreamController.add(weatherData);
       notifyListeners();
       
-      // ===== PROSES DATA PER JAM =====
-      _processHourlyData(weatherData, hourKey);
-      
-      // Gunakan windDirection untuk debug
-      debugPrint('✅ Weather: $_currentWeather, Direction: $windDirection');
+      debugPrint('✅ Weather: $date $time | Temp: $temperature°C, Hum: $humidity%, Dir: $windDirection');
       
     } catch (e) {
       debugPrint('❌ Error parsing weather data: $e');
       debugPrint('Payload: $payload');
-    }
-  }
-
-  // ===== PROSES DATA PER JAM (RATA-RATA) =====
-  void _processHourlyData(WeatherData data, String hourKey) {
-    if (hourKey.isEmpty) return;
-    
-    // Jika jam baru, simpan rata-rata jam sebelumnya
-    if (_currentHourKey.isNotEmpty && _currentHourKey != hourKey) {
-      _saveHourlyAverage();
-    }
-    
-    // Tambahkan ke buffer
-    _rawDataBuffer.add(data);
-    _currentHourKey = hourKey;
-  }
-
-  // ===== SIMPAN RATA-RATA PER JAM =====
-  void _saveHourlyAverage() {
-    if (_rawDataBuffer.isEmpty) return;
-    
-    // Hitung rata-rata
-    double avgSuhu = 0;
-    double avgKelembapan = 0;
-    double avgCahaya = 0;
-    double avgAngin = 0;
-    double avgAnginKnot = 0;
-    double avgArah = 0;
-    double totalHujan = 0;
-    
-    for (var d in _rawDataBuffer) {
-      avgSuhu += d.suhu;
-      avgKelembapan += d.kelembapan;
-      avgCahaya += d.intensitasCahaya;
-      avgAngin += d.kecepatanAngin;
-      avgAnginKnot += d.kecepatanAnginKnot;
-      avgArah += d.arahAngin;
-      totalHujan += d.curahHujan;
-    }
-    
-    final count = _rawDataBuffer.length;
-    avgSuhu /= count;
-    avgKelembapan /= count;
-    avgCahaya /= count;
-    avgAngin /= count;
-    avgAnginKnot /= count;
-    avgArah /= count;
-    
-    // Ambil data terakhir untuk tanggal/waktu
-    final lastData = _rawDataBuffer.last;
-    
-    // Buat data rata-rata per jam
-    final hourlyData = WeatherData(
-      suhu: avgSuhu,
-      kelembapan: avgKelembapan,
-      intensitasCahaya: avgCahaya.round(),
-      kecepatanAngin: avgAngin,
-      kecepatanAnginKnot: avgAnginKnot,
-      arahAngin: avgArah,
-      curahHujan: totalHujan,
-      tanggal: lastData.tanggal,
-      waktu: '${lastData.waktu.substring(0, 2)}.00', // Format: HH.00
-    );
-    
-    // Tambahkan ke history (hapus duplikat jam yang sama)
-    _weatherHistory.removeWhere((d) => 
-      d.tanggal == hourlyData.tanggal && 
-      d.waktu.substring(0, 2) == hourlyData.waktu.substring(0, 2)
-    );
-    
-    _weatherHistory.add(hourlyData);
-    
-    // Batasi jumlah data
-    while (_weatherHistory.length > maxHistoryLength) {
-      _weatherHistory.removeAt(0);
-    }
-    
-    // Kosongkan buffer
-    _rawDataBuffer.clear();
-    
-    // Simpan ke storage
-    _saveHistoryToStorage();
-    
-    debugPrint('📊 Hourly average saved: ${hourlyData.tanggal} ${hourlyData.waktu}');
-  }
-
-  // ===== FLUSH DATA SAAT APLIKASI DITUTUP =====
-  void flushHourlyData() {
-    if (_rawDataBuffer.isNotEmpty) {
-      _saveHourlyAverage();
     }
   }
 
@@ -441,7 +297,6 @@ class WeatherMQTTService extends ChangeNotifier {
   }
 
   void disconnect() {
-    flushHourlyData(); // Simpan data terakhir sebelum disconnect
     _reconnectTimer?.cancel();
     _client.disconnect();
     _connectionState = WeatherConnectionState.disconnected;
@@ -472,35 +327,9 @@ class WeatherMQTTService extends ChangeNotifier {
     debugPrint('✅ Subscribed to weather topics');
   }
 
-  // ==================== GETTERS ====================
-  List<double> getSuhuHistory() {
-    return _weatherHistory.map((data) => data.suhu).toList();
-  }
-
-  List<double> getKelembapanHistory() {
-    return _weatherHistory.map((data) => data.kelembapan).toList();
-  }
-
-  List<double> getCahayaHistory() {
-    return _weatherHistory.map((data) => data.intensitasCahaya.toDouble()).toList();
-  }
-
-  List<double> getAnginHistory() {
-    return _weatherHistory.map((data) => data.kecepatanAngin).toList();
-  }
-
-  List<double> getAnginKnotHistory() {
-    return _weatherHistory.map((data) => data.kecepatanAnginKnot).toList();
-  }
-
-  List<double> getHujanHistory() {
-    return _weatherHistory.map((data) => data.curahHujan).toList();
-  }
-
   // ==================== DISPOSE ====================
   @override
   void dispose() {
-    flushHourlyData(); // Simpan data terakhir
     _reconnectTimer?.cancel();
     _weatherStreamController.close();
     _client.disconnect();

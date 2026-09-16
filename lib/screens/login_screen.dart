@@ -197,7 +197,7 @@ class _HeaderWidget extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         const Text(
-          'WEATHER STATION',
+          'TaniKa',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.bold,

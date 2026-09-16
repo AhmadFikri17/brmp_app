@@ -34,9 +34,8 @@ class _UserDashboardScreenState extends State<UserDashboardScreen> {
         setState(() {
           _weatherData = data;
           _isDataAvailable = true;
-          debugPrint('🌤️ Weather updated: ${data.toString()}');
+          debugPrint('🌤️ Weather updated: ${data.tanggal} ${data.waktu}');
         });
-        // Data sudah otomatis disimpan per jam di service
       }
     });
   }
@@ -66,6 +65,27 @@ class _UserDashboardScreenState extends State<UserDashboardScreen> {
   void dispose() {
     _weatherMQTT.dispose();
     super.dispose();
+  }
+
+  // ===== HELPER FORMAT DATETIME =====
+  String _formatDateTime(String tanggal, String waktu) {
+    // Jika kedua kosong, gunakan waktu sekarang
+    if (tanggal.isEmpty && waktu.isEmpty) {
+      final now = DateTime.now();
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 
+                      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+      return '${now.day} ${months[now.month - 1]} ${now.year} ${now.hour.toString().padLeft(2, '0')}.${now.minute.toString().padLeft(2, '0')}';
+    }
+    
+    // Jika salah satu kosong, gunakan yang tersedia
+    if (tanggal.isEmpty) {
+      return waktu;
+    }
+    if (waktu.isEmpty) {
+      return tanggal;
+    }
+    
+    return '$tanggal $waktu';
   }
 
   @override
@@ -192,7 +212,7 @@ class _UserDashboardScreenState extends State<UserDashboardScreen> {
                             Row(
                               children: [
                                 const Text(
-                                  'KACANG WEATHER',
+                                  'TaniKa',
                                   style: TextStyle(
                                     fontSize: 17,
                                     fontWeight: FontWeight.bold,
@@ -321,17 +341,20 @@ class _UserDashboardScreenState extends State<UserDashboardScreen> {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              Text(
-                                _isDataAvailable && _weatherData != null
-                                    ? 'Update: ${_weatherData!.tanggal} ${_weatherData!.waktu}'
-                                    : 'Menunggu data...',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xFF2D6A4F),
+                              Expanded(
+                                child: Text(
+                                  _isDataAvailable && _weatherData != null
+                                      ? 'Update: ${_formatDateTime(_weatherData!.tanggal, _weatherData!.waktu)}'
+                                      : 'Menunggu data...',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xFF2D6A4F),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const Spacer(),
+                              const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,

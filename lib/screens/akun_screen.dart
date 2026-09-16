@@ -402,7 +402,7 @@ class _AkunScreenState extends State<AkunScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Kacang Weather'),
+            Text('TaniKa'),
             SizedBox(height: 8),
             Text(
               'Aplikasi monitoring cuaca untuk pertanian yang cerdas.',

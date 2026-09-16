@@ -22,7 +22,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final List<Map<String, dynamic>> _onboardingData = [
     {
       'title': 'Selamat Datang di',
-      'subtitle': 'WEATHER STATION',
+      'subtitle': 'TaniKa',
       'description': 'Aplikasi monitoring cuaca cerdas untuk pertanian aneka kacang yang berkualitas dan berkelanjutan.',
       'icon': Icons.grass,
       'color': _lightGreen,
@@ -137,7 +137,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                           SizedBox(width: screenWidth * 0.02),
                           Text(
-                            'KACANG',
+                            'TaniKa',
                             style: TextStyle(
                               fontSize: screenWidth * 0.035,
                               fontWeight: FontWeight.bold,
@@ -146,7 +146,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ),
                           ),
                           Text(
-                            'WEATHER',
+                            '',
                             style: TextStyle(
                               fontSize: screenWidth * 0.035,
                               fontWeight: FontWeight.w300,
