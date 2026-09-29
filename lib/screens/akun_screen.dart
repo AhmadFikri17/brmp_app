@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../widgets/bottom_nav_bar.dart';
 import 'login_screen.dart';
+import 'edit_profile_screen.dart';
+import 'change_password_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/firebase_service.dart';
 
@@ -12,7 +14,7 @@ class AkunScreen extends StatefulWidget {
 }
 
 class _AkunScreenState extends State<AkunScreen> {
-  int _selectedIndex = 0; // Akan diisi sesuai role
+  int _selectedIndex = 0;
   String _nama = 'User';
   String _email = 'Email@example.com';
   String _registerDate = '12 April 2026';
@@ -28,9 +30,9 @@ class _AkunScreenState extends State<AkunScreen> {
   Future<void> _checkRoleAndSetIndex() async {
     final prefs = await SharedPreferences.getInstance();
     final role = prefs.getString('userRole') ?? 'user';
+    if (!mounted) return;
     setState(() {
       _role = role;
-      // USER: Akun di index 3, ADMIN: Akun di index 4
       _selectedIndex = role == 'admin' ? 4 : 3;
     });
   }
@@ -38,22 +40,24 @@ class _AkunScreenState extends State<AkunScreen> {
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseService.getCurrentUser();
-    
+
     if (user != null) {
       final userData = await FirebaseService.getUserData(user.uid);
-      if (userData != null) {
+      if (userData != null && mounted) {
         setState(() {
           _nama = userData['nama'] ?? 'User';
           _email = userData['email'] ?? 'Email@example.com';
-          _registerDate = userData['registerDate'] != null 
-              ? DateTime.parse(userData['registerDate']).toString().split(' ')[0] 
+          _registerDate = userData['registerDate'] != null
+              ? DateTime.parse(userData['registerDate'])
+                  .toString()
+                  .split(' ')[0]
               : '12 April 2026';
           _role = userData['role'] ?? 'user';
         });
       }
     }
-    
-    // Fallback ke SharedPreferences jika Firestore belum terisi
+
+    if (!mounted) return;
     setState(() {
       _nama = prefs.getString('userName') ?? _nama;
       _email = prefs.getString('userEmail') ?? _email;
@@ -70,10 +74,34 @@ class _AkunScreenState extends State<AkunScreen> {
     );
   }
 
+  Future<void> _openEditProfile() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditProfileScreen(
+          nama: _nama,
+          email: _email,
+        ),
+      ),
+    );
+    if (result == true) {
+      await _loadUserData();
+    }
+  }
+
+  Future<void> _openChangePassword() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ChangePasswordScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAdmin = _role == 'admin';
-    
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F9F9),
       appBar: AppBar(
@@ -138,19 +166,25 @@ class _AkunScreenState extends State<AkunScreen> {
                         ),
                         const SizedBox(height: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
                           decoration: BoxDecoration(
-                            color: isAdmin 
+                            color: isAdmin
                                 ? Colors.amber.withValues(alpha: 0.2)
-                                : const Color(0xFF2D6A4F).withValues(alpha: 0.1),
+                                : const Color(0xFF2D6A4F)
+                                    .withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                isAdmin ? Icons.admin_panel_settings : Icons.person,
-                                color: isAdmin ? Colors.amber.shade700 : const Color(0xFF2D6A4F),
+                                isAdmin
+                                    ? Icons.admin_panel_settings
+                                    : Icons.person,
+                                color: isAdmin
+                                    ? Colors.amber.shade700
+                                    : const Color(0xFF2D6A4F),
                                 size: 13,
                               ),
                               const SizedBox(width: 4),
@@ -158,7 +192,9 @@ class _AkunScreenState extends State<AkunScreen> {
                                 isAdmin ? 'ADMIN' : 'USER',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: isAdmin ? Colors.amber.shade700 : const Color(0xFF2D6A4F),
+                                  color: isAdmin
+                                      ? Colors.amber.shade700
+                                      : const Color(0xFF2D6A4F),
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -190,25 +226,19 @@ class _AkunScreenState extends State<AkunScreen> {
                   _buildMenuItem(
                     icon: Icons.edit,
                     title: 'Edit Profil',
-                    onTap: () {
-                      // Navigate to edit profile
-                    },
+                    onTap: _openEditProfile,
                   ),
                   _buildDivider(),
                   _buildMenuItem(
                     icon: Icons.lock,
                     title: 'Ganti Password',
-                    onTap: () {
-                      // Navigate to change password
-                    },
+                    onTap: _openChangePassword,
                   ),
                   _buildDivider(),
                   _buildMenuItem(
                     icon: Icons.info,
                     title: 'Tentang Aplikasi',
-                    onTap: () {
-                      _showAboutDialog();
-                    },
+                    onTap: _showAboutDialog,
                   ),
                 ],
               ),
@@ -240,68 +270,18 @@ class _AkunScreenState extends State<AkunScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Nama Lengkap',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        Text(
-                          _nama,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+                    _buildInfoRow('Nama Lengkap', _nama),
                     const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Email',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        Text(
-                          _email,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+                    _buildInfoRow('Email', _email),
                     const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Terdaftar sejak',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        Text(
-                          _registerDate,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+                    _buildInfoRow('Terdaftar sejak', _registerDate),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           'Status',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                          ),
+                          style: TextStyle(color: Colors.grey.shade600),
                         ),
                         const Text(
                           'Aktif',
@@ -318,14 +298,14 @@ class _AkunScreenState extends State<AkunScreen> {
                       children: [
                         Text(
                           'Role',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                          ),
+                          style: TextStyle(color: Colors.grey.shade600),
                         ),
                         Text(
                           _role.toUpperCase(),
                           style: TextStyle(
-                            color: _role == 'admin' ? Colors.amber.shade700 : const Color(0xFF2D6A4F),
+                            color: _role == 'admin'
+                                ? Colors.amber.shade700
+                                : const Color(0xFF2D6A4F),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -369,6 +349,23 @@ class _AkunScreenState extends State<AkunScreen> {
           });
         },
       ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(color: Colors.grey.shade600)),
+        Flexible(
+          child: Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.end,
+          ),
+        ),
+      ],
     );
   }
 

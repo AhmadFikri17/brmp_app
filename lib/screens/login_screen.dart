@@ -52,17 +52,31 @@ class _LoginScreenState extends State<LoginScreen> {
       if (role == 'admin') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const AdminDashboardScreen()),
+          MaterialPageRoute(
+              builder: (context) => const AdminDashboardScreen()),
         );
       } else {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const UserDashboardScreen()),
+          MaterialPageRoute(
+              builder: (context) => const UserDashboardScreen()),
         );
       }
     } else {
+      // Hanya tampilkan error box di atas (tanpa SnackBar)
+      String errMsg = result['error'] ?? 'Login gagal';
+
+      // Normalisasi pesan agar konsisten
+      final lower = errMsg.toLowerCase();
+      if (lower.contains('kredensial') ||
+          lower.contains('credential') ||
+          lower.contains('password salah') ||
+          lower.contains('tidak terdaftar')) {
+        errMsg = 'Email atau password salah';
+      }
+
       setState(() {
-        _errorMessage = result['error'] ?? 'Login gagal';
+        _errorMessage = errMsg;
       });
     }
   }
@@ -108,13 +122,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     const _HeaderWidget(),
                     const SizedBox(height: 30),
-                    
-                    // Error message
+
+                    // Error message (hanya ini yang tampil)
                     if (_errorMessage.isNotEmpty) ...[
                       _ErrorMessageWidget(errorMessage: _errorMessage),
                       const SizedBox(height: 16),
                     ],
-                    
+
                     // Form login
                     _LoginFormWidget(
                       formKey: _formKey,
@@ -129,14 +143,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         });
                       },
                     ),
-                    
+
                     const SizedBox(height: 16),
                     const _RegisterButtonWidget(),
-                    
-                    // Spacer dinamis - lebih kecil saat keyboard muncul
+
+                    // Spacer dinamis
                     SizedBox(
-                      height: viewInsets > 0 
-                          ? 20 
+                      height: viewInsets > 0
+                          ? 20
                           : screenHeight * 0.25,
                     ),
                   ],
@@ -349,7 +363,8 @@ class _EmailField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _LoginScreenState._green, width: 1.5),
+          borderSide: const BorderSide(
+              color: _LoginScreenState._green, width: 1.5),
         ),
       ),
       validator: (value) {
@@ -412,7 +427,8 @@ class _PasswordField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _LoginScreenState._green, width: 1.5),
+          borderSide: const BorderSide(
+              color: _LoginScreenState._green, width: 1.5),
         ),
       ),
       validator: (value) {
