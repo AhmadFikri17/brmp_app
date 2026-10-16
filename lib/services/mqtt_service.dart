@@ -26,10 +26,17 @@ class MQTTService extends ChangeNotifier {
   static const String topicRelay1Status = 'relay/1/status';
   static const String topicRelay2Set = 'relay/2/set';
   static const String topicRelay2Status = 'relay/2/status';
-  
+
+  // ✅ BARU: topic mode relay (App → ESP32) dan status mode (ESP32 → App)
+  static const String topicRelay1Mode = 'relay/1/mode';
+  static const String topicRelay2Mode = 'relay/2/mode';
+  static const String topicRelay1ModeStatus = 'relay/1/mode/status';
+  static const String topicRelay2ModeStatus = 'relay/2/mode/status';
+
   // Sensor Topics
   static const String topicSensorData = 'sensor/data';
-  
+  static const String topicThreshold = 'sensor/threshold';
+
   // Camera Topics
   static const String topicCameraIp = 'greenhouse/camera/ip';
   // ====================================================
@@ -38,6 +45,9 @@ class MQTTService extends ChangeNotifier {
 
   AppConnectionState _connectionState = AppConnectionState.disconnected;
   AppConnectionState get connectionState => _connectionState;
+
+  // ✅ Flag untuk mencegah "used after disposed"
+  bool _disposed = false;
 
   // Relay Status
   final Map<String, RelayModel> _relays = {};
@@ -52,16 +62,30 @@ class MQTTService extends ChangeNotifier {
   List<SensorData> get sensorHistory => _sensorHistory;
   static const int maxHistoryLength = 60;
 
-  // Stream Controllers
-  final StreamController<SensorData> _sensorStreamController = 
+  // ==================== SIMPAN STATUS & MODE TERAKHIR ====================
+  // ✅ Ini penting: retained message kadang datang sebelum listener siap
+  final Map<String, bool> _lastRelayStatus = {'1': false, '2': false};
+  final Map<String, String> _lastRelayMode = {'1': 'otomatis', '2': 'otomatis'};
+
+  Map<String, bool> get lastRelayStatus => Map.from(_lastRelayStatus);
+  Map<String, String> get lastRelayMode => Map.from(_lastRelayMode);
+
+  // ==================== STREAM CONTROLLERS ====================
+  final StreamController<SensorData> _sensorStreamController =
       StreamController<SensorData>.broadcast();
   Stream<SensorData> get sensorStream => _sensorStreamController.stream;
 
-  final StreamController<Map<String, bool>> _relayStreamController = 
+  final StreamController<Map<String, bool>> _relayStreamController =
       StreamController<Map<String, bool>>.broadcast();
   Stream<Map<String, bool>> get relayStream => _relayStreamController.stream;
 
-  final StreamController<String> _cameraStreamController = 
+  // ✅ BARU: stream untuk mode relay
+  final StreamController<Map<String, String>> _relayModeStreamController =
+      StreamController<Map<String, String>>.broadcast();
+  Stream<Map<String, String>> get relayModeStream =>
+      _relayModeStreamController.stream;
+
+  final StreamController<String> _cameraStreamController =
       StreamController<String>.broadcast();
   Stream<String> get cameraStream => _cameraStreamController.stream;
 
@@ -70,7 +94,6 @@ class MQTTService extends ChangeNotifier {
   bool _isListening = false;
 
   MQTTService() {
-    // Inisialisasi relay default
     _relays['1'] = RelayModel(id: '1', name: 'Relay 1');
     _relays['2'] = RelayModel(id: '2', name: 'Relay 2');
     _initClient();
@@ -79,52 +102,61 @@ class MQTTService extends ChangeNotifier {
   // ==================== INIT CLIENT ====================
   void _initClient() {
     debugPrint('🔧 Initializing MQTT Client...');
-    
+
     _client = MqttServerClient.withPort(
-      _host, 
+      _host,
       'flutter_client_${DateTime.now().millisecondsSinceEpoch}',
-      _port
+      _port,
     );
     _client.secure = true;
     _client.keepAlivePeriod = 20;
-    
+
     _client.onConnected = _onConnected;
     _client.onDisconnected = _onDisconnected;
     _client.onSubscribed = _onSubscribed;
-    
+
     debugPrint('✅ MQTT Client initialized');
   }
 
   // ==================== MESSAGE LISTENER ====================
   void _setupMessageListener() {
+    if (_disposed) return;
     if (_isListening) return;
     if (_client.updates == null) {
       debugPrint('⚠️ _client.updates is null, cannot setup listener');
       return;
     }
-    
+
     debugPrint('📡 Setting up message listener...');
-    
+
     _client.updates!.listen((List<MqttReceivedMessage<MqttMessage>> events) {
+      if (_disposed) return;
       for (var event in events) {
         try {
           final topic = event.topic;
           final message = event.payload as MqttPublishMessage;
-          final payload = MqttPublishPayload.bytesToStringAsString(message.payload.message);
-          
+          final payload =
+              MqttPublishPayload.bytesToStringAsString(message.payload.message);
+
           debugPrint('📩 [MQTT] Topic: $topic, Payload: "$payload"');
-          
-          // Handle Relay Status
+
+          // ---- Relay Status ----
           if (topic == topicRelay1Status) {
             _updateRelayStatus('1', payload);
           } else if (topic == topicRelay2Status) {
             _updateRelayStatus('2', payload);
           }
-          // Handle Sensor Data
+          // ---- Relay Mode Status (dari ESP32) ✅ BARU ----
+          else if (topic == topicRelay1ModeStatus) {
+            _updateRelayMode('1', payload);
+          } else if (topic == topicRelay2ModeStatus) {
+            _updateRelayMode('2', payload);
+          }
+          // ---- Sensor Data ----
           else if (topic == topicSensorData) {
             _handleSensorData(payload);
           }
-          // Handle Camera IP
+          // ---- Camera IP ----
           else if (topic == topicCameraIp) {
             _handleCameraIp(payload);
           }
@@ -133,29 +165,47 @@ class MQTTService extends ChangeNotifier {
         }
       }
     });
-    
+
     _isListening = true;
     debugPrint('✅ Message listener setup complete');
   }
 
   // ==================== UPDATE RELAY STATUS ====================
   void _updateRelayStatus(String relayId, String status) {
+    if (_disposed) return;
     if (_relays.containsKey(relayId)) {
       final isOn = status.toUpperCase() == 'ON';
       _relays[relayId]!.updateStatus(status);
-      
-      // Kirim ke stream
+      _lastRelayStatus[relayId] = isOn;
+
       _relayStreamController.add({relayId: isOn});
       notifyListeners();
-      
+
       debugPrint('✅ Relay $relayId = ${isOn ? "ON" : "OFF"}');
     }
   }
 
+  // ==================== UPDATE RELAY MODE ✅ BARU ====================
+  void _updateRelayMode(String relayId, String mode) {
+    if (_disposed) return;
+    final normalized = mode.toLowerCase();
+    // validasi: hanya "manual" atau "otomatis"
+    final finalMode =
+        (normalized == 'otomatis' || normalized == 'manual')
+            ? normalized
+            : 'otomatis';
+
+    _lastRelayMode[relayId] = finalMode;
+    _relayModeStreamController.add(Map.from(_lastRelayMode));
+    notifyListeners();
+
+    debugPrint('✅ Relay $relayId Mode = $finalMode');
+  }
+
   // ==================== HANDLE SENSOR DATA ====================
   void _handleSensorData(String payload) {
+    if (_disposed) return;
     try {
-      // Parse data sensor (format: "suhu,kelembapan,cahaya")
       final parts = payload.split(',');
       if (parts.length >= 3) {
         final sensorData = SensorData(
@@ -163,18 +213,17 @@ class MQTTService extends ChangeNotifier {
           kelembapan: double.tryParse(parts[1]) ?? 0,
           intensitasCahaya: double.tryParse(parts[2]) ?? 0,
         );
-        
+
         _currentSensorData = sensorData;
         _sensorHistory.add(sensorData);
-        
-        // Batasi history
+
         if (_sensorHistory.length > maxHistoryLength) {
           _sensorHistory.removeAt(0);
         }
-        
+
         _sensorStreamController.add(sensorData);
         notifyListeners();
-        
+
         debugPrint('✅ Sensor Data: $_currentSensorData');
       }
     } catch (e) {
@@ -184,19 +233,14 @@ class MQTTService extends ChangeNotifier {
 
   // ==================== HANDLE CAMERA IP ====================
   void _handleCameraIp(String ip) {
+    if (_disposed) return;
     debugPrint('📷📷📷 Camera IP received: $ip');
-    
-    // Update ke Firestore
+
     _updateCameraInFirestore(ip);
-    
-    // Kirim ke stream
     _cameraStreamController.add(ip);
-    
-    // Notify listeners
     notifyListeners();
   }
 
-  // ==================== UPDATE CAMERA IP TO FIRESTORE ====================
   void _updateCameraInFirestore(String ip) {
     try {
       final firestore = FirebaseFirestore.instance;
@@ -213,19 +257,22 @@ class MQTTService extends ChangeNotifier {
 
   // ==================== MQTT CONNECTION ====================
   void _onConnected() {
+    if (_disposed) return;
     debugPrint('✅✅✅ MQTT Connected!');
     _connectionState = AppConnectionState.connected;
     _isSubscribed = false;
     notifyListeners();
-    
+
     _setupMessageListener();
-    
+
     Future.delayed(const Duration(milliseconds: 500), () {
+      if (_disposed) return;
       _subscribeToTopics();
     });
   }
 
   void _onDisconnected() {
+    if (_disposed) return;
     debugPrint('❌❌❌ MQTT Disconnected');
     _connectionState = AppConnectionState.disconnected;
     _isSubscribed = false;
@@ -239,6 +286,7 @@ class MQTTService extends ChangeNotifier {
   }
 
   Future<bool> connect() async {
+    if (_disposed) return false;
     try {
       debugPrint('🔌 Connecting to MQTT broker...');
       _connectionState = AppConnectionState.connecting;
@@ -277,15 +325,19 @@ class MQTTService extends ChangeNotifier {
 
   void disconnect() {
     _reconnectTimer?.cancel();
-    _client.disconnect();
+    if (!_disposed) {
+      _client.disconnect();
+    }
     _connectionState = AppConnectionState.disconnected;
     _isListening = false;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   void _scheduleReconnect() {
+    if (_disposed) return;
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(const Duration(seconds: 5), () {
+      if (_disposed) return;
       debugPrint('🔄 Attempting to reconnect...');
       connect();
     });
@@ -293,43 +345,51 @@ class MQTTService extends ChangeNotifier {
 
   // ==================== SUBSCRIBE TOPICS ====================
   void _subscribeToTopics() {
+    if (_disposed) return;
     if (_connectionState != AppConnectionState.connected) return;
     if (_isSubscribed) return;
-    
+
     debugPrint('📡 Subscribing to topics...');
-    
-    // Subscribe ke relay status
+
+    // Relay status
     _client.subscribe(topicRelay1Status, MqttQos.atLeastOnce);
     _client.subscribe(topicRelay2Status, MqttQos.atLeastOnce);
-    
-    // Subscribe ke sensor data
+
+    // ✅ BARU: Relay mode status (retained dari ESP32)
+    _client.subscribe(topicRelay1ModeStatus, MqttQos.atLeastOnce);
+    _client.subscribe(topicRelay2ModeStatus, MqttQos.atLeastOnce);
+
+    // Sensor data
     _client.subscribe(topicSensorData, MqttQos.atLeastOnce);
-    
-    // 🔥 Subscribe ke camera IP
+
+    // Camera IP
     _client.subscribe(topicCameraIp, MqttQos.atLeastOnce);
-    
-    // Subscribe ke semua topic untuk debugging
+
+    // Debug — wildcard
     _client.subscribe('relay/#', MqttQos.atLeastOnce);
     _client.subscribe('sensor/#', MqttQos.atLeastOnce);
     _client.subscribe('greenhouse/#', MqttQos.atLeastOnce);
-    
+
     _isSubscribed = true;
     debugPrint('✅ Subscribed to all topics');
-    
+
     // Request status awal
     Future.delayed(const Duration(seconds: 1), () {
+      if (_disposed) return;
       _requestInitialStatus();
     });
   }
 
   void _requestInitialStatus() {
+    if (_disposed) return;
     debugPrint('📤 Requesting initial status...');
     publish(topicRelay1Set, 'STATUS');
     publish(topicRelay2Set, 'STATUS');
   }
 
-  // ==================== PUBLISH METHODS ====================
+  // ==================== PUBLISH ====================
   void publish(String topic, String message) {
+    if (_disposed) return;
     if (_connectionState != AppConnectionState.connected) {
       debugPrint('⚠️ Cannot publish: Not connected');
       return;
@@ -348,9 +408,16 @@ class MQTTService extends ChangeNotifier {
     }
   }
 
+  // ✅ Publish command relay ke topic /set dengan payload "ON"/"OFF"
   void publishRelay(String relayId, String state) {
     final topic = 'relay/$relayId/set';
     publish(topic, state.toUpperCase());
+  }
+
+  // ✅ Publish mode relay ke topic /mode
+  void publishRelayMode(String relayId, String mode) {
+    final topic = 'relay/$relayId/mode';
+    publish(topic, mode.toLowerCase());
   }
 
   void publishSensorData(SensorData data) {
@@ -392,11 +459,15 @@ class MQTTService extends ChangeNotifier {
   // ==================== DISPOSE ====================
   @override
   void dispose() {
+    _disposed = true; // ✅ cegah "used after disposed"
     _reconnectTimer?.cancel();
     _sensorStreamController.close();
     _relayStreamController.close();
+    _relayModeStreamController.close();
     _cameraStreamController.close();
-    _client.disconnect();
+    try {
+      _client.disconnect();
+    } catch (_) {}
     super.dispose();
   }
 }

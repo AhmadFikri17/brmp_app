@@ -40,7 +40,7 @@ class _KontrolScreenState extends State<KontrolScreen> {
         final kelembapanThreshold = appState.kelembapanThreshold;
         final cahayaThreshold = appState.cahayaThreshold;
         final historyData = appState.sensorHistory;
-        
+
         if (sensorData == null) {
           return _buildLoadingScaffold();
         }
@@ -60,30 +60,34 @@ class _KontrolScreenState extends State<KontrolScreen> {
                   padding: const EdgeInsets.all(12),
                   child: Column(
                     children: [
-                      _buildSensorCard(sensorData, suhuThreshold, kelembapanThreshold, cahayaThreshold),
+                      _buildSensorCard(sensorData, suhuThreshold,
+                          kelembapanThreshold, cahayaThreshold),
                       const SizedBox(height: 12),
-                      
+
                       // GRAFIK SUHU & KELEMBAPAN
                       _buildCombinedChartCard(historyData),
                       const SizedBox(height: 12),
-                      
+
                       // GRAFIK CAHAYA
                       _buildLightChartCard(historyData),
                       const SizedBox(height: 12),
-                      
+
                       // Button Lihat Kamera
                       _buildCameraButton(),
                       const SizedBox(height: 12),
-                      
+
+                      // ==================== RELAY 1 ====================
                       _buildRelayCard(
                         title: 'Kipas 1',
                         relayId: '1',
                         status: relay1Status,
                         mode: relay1Mode,
                         onToggle: () {
+                          // Switch hanya bisa digeser di mode manual
+                          if (relay1Mode != 'manual') return;
                           appState.toggleRelay('1');
-                          // Kirim status ke ESP32
-                          _sendRelayStatusToESP32('1', !relay1Status, appState);
+                          _sendRelayCommandToESP32(
+                              '1', !relay1Status, appState);
                         },
                         onModeChange: (mode) {
                           appState.setRelayMode('1', mode);
@@ -94,15 +98,18 @@ class _KontrolScreenState extends State<KontrolScreen> {
                         kelembapanThreshold: kelembapanThreshold,
                       ),
                       const SizedBox(height: 12),
+
+                      // ==================== RELAY 2 ====================
                       _buildRelayCard(
                         title: 'Kipas 2',
                         relayId: '2',
                         status: relay2Status,
                         mode: relay2Mode,
                         onToggle: () {
+                          if (relay2Mode != 'manual') return;
                           appState.toggleRelay('2');
-                          // Kirim status ke ESP32
-                          _sendRelayStatusToESP32('2', !relay2Status, appState);
+                          _sendRelayCommandToESP32(
+                              '2', !relay2Status, appState);
                         },
                         onModeChange: (mode) {
                           appState.setRelayMode('2', mode);
@@ -113,6 +120,7 @@ class _KontrolScreenState extends State<KontrolScreen> {
                         kelembapanThreshold: kelembapanThreshold,
                       ),
                       const SizedBox(height: 12),
+
                       _buildThresholdCard(appState),
                       const SizedBox(height: 12),
                       _buildStatusInfo(appState),
@@ -174,6 +182,9 @@ class _KontrolScreenState extends State<KontrolScreen> {
 
   // ==================== GRAFIK CAHAYA ====================
   Widget _buildLightChartCard(List<SensorData> historyData) {
+    // ✅ Konsisten tampilkan max 20 data
+    final displayCount = historyData.length > 20 ? 20 : historyData.length;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: _cardDecoration(),
@@ -190,7 +201,7 @@ class _KontrolScreenState extends State<KontrolScreen> {
               ),
               const Spacer(),
               Text(
-                '${historyData.length} data',
+                '$displayCount data', // ✅ FIX
                 style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
               ),
             ],
@@ -221,11 +232,12 @@ class _KontrolScreenState extends State<KontrolScreen> {
       );
     }
 
-    // Ambil hanya 20 data terbaru
     final chartData = data.length > 20 ? data.sublist(data.length - 20) : data;
 
-    double maxTemp = chartData.map((d) => d.suhu).reduce((a, b) => a > b ? a : b);
-    double maxHum = chartData.map((d) => d.kelembapan).reduce((a, b) => a > b ? a : b);
+    double maxTemp =
+        chartData.map((d) => d.suhu).reduce((a, b) => a > b ? a : b);
+    double maxHum =
+        chartData.map((d) => d.kelembapan).reduce((a, b) => a > b ? a : b);
     double maxValue = (maxTemp > maxHum ? maxTemp : maxHum) + 5;
     if (maxValue < 30) maxValue = 30;
 
@@ -284,7 +296,6 @@ class _KontrolScreenState extends State<KontrolScreen> {
           border: Border.all(color: Colors.grey.shade300, width: 1),
         ),
         lineBarsData: [
-          // SUHU
           LineChartBarData(
             spots: chartData.asMap().entries.map((entry) {
               int index = entry.key;
@@ -297,7 +308,6 @@ class _KontrolScreenState extends State<KontrolScreen> {
             dotData: const FlDotData(show: true),
             belowBarData: BarAreaData(show: false),
           ),
-          // KELEMBAPAN
           LineChartBarData(
             spots: chartData.asMap().entries.map((entry) {
               int index = entry.key;
@@ -330,10 +340,11 @@ class _KontrolScreenState extends State<KontrolScreen> {
       );
     }
 
-    // Ambil hanya 20 data terbaru
     final chartData = data.length > 20 ? data.sublist(data.length - 20) : data;
 
-    double maxLight = chartData.map((d) => d.intensitasCahaya).reduce((a, b) => a > b ? a : b);
+    double maxLight = chartData
+        .map((d) => d.intensitasCahaya)
+        .reduce((a, b) => a > b ? a : b);
     double maxValue = maxLight + 100;
     if (maxValue < 200) maxValue = 200;
 
@@ -538,13 +549,19 @@ class _KontrolScreenState extends State<KontrolScreen> {
     );
   }
 
-  // ==================== KIRIM KE ESP32 ====================
-  void _sendModeToESP32(String relayId, String mode, AppState appState) {
-    appState.mqttService.publish('relay/$relayId/mode', mode);
+  // ==================== KIRIM COMMAND KE ESP32 ====================
+  // ✅ FIX: ESP32 pakai topic /set dengan payload "ON"/"OFF"
+  void _sendRelayCommandToESP32(
+      String relayId, bool status, AppState appState) {
+    appState.mqttService.publish(
+      'relay/$relayId/set',
+      status ? 'ON' : 'OFF',
+    );
   }
 
-  void _sendRelayStatusToESP32(String relayId, bool status, AppState appState) {
-    appState.mqttService.publish('relay/$relayId/status', status ? '1' : '0');
+  // ✅ FIX: Kirim mode ke topic relay/X/mode
+  void _sendModeToESP32(String relayId, String mode, AppState appState) {
+    appState.mqttService.publish('relay/$relayId/mode', mode);
   }
 
   void _sendThresholdToESP32(AppState appState) {
@@ -556,7 +573,8 @@ class _KontrolScreenState extends State<KontrolScreen> {
 
   // ==================== CONNECTION STATUS (APPBAR) ====================
   Widget _buildConnectionStatus(AppState appState) {
-    final isConnected = appState.mqttService.connectionState == AppConnectionState.connected;
+    final isConnected =
+        appState.mqttService.connectionState == AppConnectionState.connected;
     return Container(
       margin: const EdgeInsets.only(right: 12),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -567,19 +585,19 @@ class _KontrolScreenState extends State<KontrolScreen> {
       child: Row(
         children: [
           Container(
-            width: 6, 
-            height: 6, 
+            width: 6,
+            height: 6,
             decoration: BoxDecoration(
-              color: isConnected ? Colors.green : Colors.red, 
-              shape: BoxShape.circle
+              color: isConnected ? Colors.green : Colors.red,
+              shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 4),
           Text(
             isConnected ? 'Online' : 'Offline',
             style: TextStyle(
-              fontSize: 10, 
-              color: isConnected ? Colors.green : Colors.red, 
+              fontSize: 10,
+              color: isConnected ? Colors.green : Colors.red,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -589,7 +607,8 @@ class _KontrolScreenState extends State<KontrolScreen> {
   }
 
   // ==================== SENSOR CARD ====================
-  Widget _buildSensorCard(SensorData data, double suhuT, double kelembapanT, double cahayaT) {
+  Widget _buildSensorCard(
+      SensorData data, double suhuT, double kelembapanT, double cahayaT) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: _cardDecoration(),
@@ -601,16 +620,23 @@ class _KontrolScreenState extends State<KontrolScreen> {
               SizedBox(width: 6),
               Text(
                 'Sensor',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF2D6A4F)),
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2D6A4F)),
               ),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              _buildSensorItem(Icons.thermostat, 'Suhu', '${data.suhu.toStringAsFixed(1)}°C', Colors.red),
-              _buildSensorItem(Icons.water_drop, 'Kelembapan', '${data.kelembapan.toStringAsFixed(1)}%', Colors.blue),
-              _buildSensorItem(Icons.wb_sunny, 'Cahaya', '${data.intensitasCahaya.toStringAsFixed(0)} Lux', Colors.orange),
+              _buildSensorItem(Icons.thermostat, 'Suhu',
+                  '${data.suhu.toStringAsFixed(1)}°C', Colors.red),
+              _buildSensorItem(Icons.water_drop, 'Kelembapan',
+                  '${data.kelembapan.toStringAsFixed(1)}%', Colors.blue),
+              _buildSensorItem(Icons.wb_sunny, 'Cahaya',
+                  '${data.intensitasCahaya.toStringAsFixed(0)} Lux',
+                  Colors.orange),
             ],
           ),
         ],
@@ -618,7 +644,8 @@ class _KontrolScreenState extends State<KontrolScreen> {
     );
   }
 
-  Widget _buildSensorItem(IconData icon, String label, String value, Color color) {
+  Widget _buildSensorItem(
+      IconData icon, String label, String value, Color color) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 6),
@@ -630,8 +657,13 @@ class _KontrolScreenState extends State<KontrolScreen> {
           children: [
             Icon(icon, color: color, size: 18),
             const SizedBox(height: 2),
-            Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
-            Text(label, style: TextStyle(fontSize: 9, color: Colors.grey.shade600)),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: color)),
+            Text(label,
+                style: TextStyle(fontSize: 9, color: Colors.grey.shade600)),
           ],
         ),
       ),
@@ -650,6 +682,9 @@ class _KontrolScreenState extends State<KontrolScreen> {
     required double cahayaThreshold,
     required double kelembapanThreshold,
   }) {
+    // ✅ Switch hanya bisa digeser kalau mode == 'manual'
+    final isSwitchEnabled = mode == 'manual';
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: _cardDecoration(),
@@ -657,13 +692,18 @@ class _KontrolScreenState extends State<KontrolScreen> {
         children: [
           Row(
             children: [
-              Icon(Icons.electric_bolt, color: status ? Colors.green : Colors.grey, size: 18),
+              Icon(Icons.electric_bolt,
+                  color: status ? Colors.green : Colors.grey, size: 18),
               const SizedBox(width: 6),
-              Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.bold)),
               const Spacer(),
-              _buildModeChip('Manual', mode == 'manual', () => onModeChange('manual')),
+              _buildModeChip(
+                  'Manual', mode == 'manual', () => onModeChange('manual')),
               const SizedBox(width: 4),
-              _buildModeChip('Otomatis', mode == 'otomatis', () => onModeChange('otomatis')),
+              _buildModeChip('Otomatis', mode == 'otomatis',
+                  () => onModeChange('otomatis')),
             ],
           ),
           const SizedBox(height: 8),
@@ -671,62 +711,84 @@ class _KontrolScreenState extends State<KontrolScreen> {
             children: [
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                   decoration: BoxDecoration(
                     color: status ? Colors.green.shade50 : Colors.grey.shade50,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: status ? Colors.green.shade200 : Colors.grey.shade200),
+                    border: Border.all(
+                        color: status
+                            ? Colors.green.shade200
+                            : Colors.grey.shade200),
                   ),
                   child: Row(
                     children: [
-                      Icon(status ? Icons.check_circle : Icons.cancel, color: status ? Colors.green : Colors.grey, size: 16),
+                      Icon(status ? Icons.check_circle : Icons.cancel,
+                          color: status ? Colors.green : Colors.grey,
+                          size: 16),
                       const SizedBox(width: 6),
                       Text(
                         status ? 'AKTIF' : 'MATI',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: status ? Colors.green : Colors.grey, fontSize: 12),
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: status ? Colors.green : Colors.grey,
+                            fontSize: 12),
                       ),
                       const SizedBox(width: 6),
                       Text(
                         mode == 'otomatis' ? '(Otomatis)' : '(Manual)',
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                        style: TextStyle(
+                            fontSize: 10, color: Colors.grey.shade500),
                       ),
                     ],
                   ),
                 ),
               ),
               const SizedBox(width: 10),
+
+              // ✅ SWITCH — terkunci kalau mode otomatis
               GestureDetector(
-                onTap: onToggle,
-                child: Container(
-                  width: 50,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: status ? Colors.green : Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Stack(
-                    children: [
-                      AnimatedAlign(
-                        duration: const Duration(milliseconds: 300),
-                        alignment: status ? Alignment.centerRight : Alignment.centerLeft,
-                        child: Container(
-                          width: 24,
-                          height: 24,
-                          margin: const EdgeInsets.all(2),
-                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                onTap: isSwitchEnabled ? onToggle : null,
+                child: Opacity(
+                  opacity: isSwitchEnabled ? 1.0 : 0.4,
+                  child: Container(
+                    width: 50,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: status ? Colors.green : Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Stack(
+                      children: [
+                        AnimatedAlign(
+                          duration: const Duration(milliseconds: 300),
+                          alignment: status
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            margin: const EdgeInsets.all(2),
+                            decoration: const BoxDecoration(
+                                color: Colors.white, shape: BoxShape.circle),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ],
           ),
+
+          // Info threshold kalau mode otomatis
           if (mode == 'otomatis')
             Container(
               margin: const EdgeInsets.only(top: 6),
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
+              decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(6)),
               child: Row(
                 children: [
                   const Icon(Icons.info_outline, color: Colors.blue, size: 14),
@@ -734,7 +796,32 @@ class _KontrolScreenState extends State<KontrolScreen> {
                   Expanded(
                     child: Text(
                       'ON: Kelembapan > ${kelembapanThreshold.toStringAsFixed(0)}% ATAU Suhu > ${suhuThreshold.toStringAsFixed(0)}°C ATAU Cahaya < ${cahayaThreshold.toStringAsFixed(0)} Lux',
-                      style: TextStyle(fontSize: 9, color: Colors.blue.shade700),
+                      style:
+                          TextStyle(fontSize: 9, color: Colors.blue.shade700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Info switch terkunci
+          if (!isSwitchEnabled)
+            Container(
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(6)),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_outline,
+                      color: Colors.orange, size: 14),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Switch terkunci. Tap "Manual" untuk kontrol manual.',
+                      style: TextStyle(
+                          fontSize: 9, color: Colors.orange.shade800),
                     ),
                   ),
                 ],
@@ -775,19 +862,27 @@ class _KontrolScreenState extends State<KontrolScreen> {
       child: Column(
         children: [
           GestureDetector(
-            onTap: () => setState(() => _thresholdExpanded = !_thresholdExpanded),
+            onTap: () =>
+                setState(() => _thresholdExpanded = !_thresholdExpanded),
             child: Row(
               children: [
                 const Icon(Icons.tune, color: Color(0xFF2D6A4F), size: 18),
                 const SizedBox(width: 6),
-                const Text('Threshold', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                const Text('Threshold',
+                    style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.bold)),
                 const Spacer(),
                 Text(
                   '${appState.suhuThreshold.toStringAsFixed(0)}°C | ${appState.kelembapanThreshold.toStringAsFixed(0)}% | ${appState.cahayaThreshold.toStringAsFixed(0)} Lux',
                   style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
                 ),
                 const SizedBox(width: 4),
-                Icon(_thresholdExpanded ? Icons.expand_less : Icons.expand_more, size: 20, color: Colors.grey),
+                Icon(
+                    _thresholdExpanded
+                        ? Icons.expand_less
+                        : Icons.expand_more,
+                    size: 20,
+                    color: Colors.grey),
               ],
             ),
           ),
@@ -864,12 +959,16 @@ class _KontrolScreenState extends State<KontrolScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: TextStyle(fontSize: 9, color: Colors.grey.shade600)),
+            Text(label,
+                style: TextStyle(fontSize: 9, color: Colors.grey.shade600)),
             Text(
-              unit == 'Lux' 
+              unit == 'Lux'
                   ? '${value.round()} $unit'
                   : '${value.toStringAsFixed(1)} $unit',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2D6A4F)),
+              style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2D6A4F)),
             ),
           ],
         ),
@@ -895,7 +994,8 @@ class _KontrolScreenState extends State<KontrolScreen> {
 
   // ==================== STATUS INFO ====================
   Widget _buildStatusInfo(AppState appState) {
-    final isAnyOn = appState.getRelayStatus('1') || appState.getRelayStatus('2');
+    final isAnyOn =
+        appState.getRelayStatus('1') || appState.getRelayStatus('2');
     final data = appState.currentSensorData;
 
     return Container(
@@ -906,12 +1006,17 @@ class _KontrolScreenState extends State<KontrolScreen> {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(color: isAnyOn ? Colors.green : Colors.grey, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+                color: isAnyOn ? Colors.green : Colors.grey,
+                shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
           Text(
             isAnyOn ? '🟢 Relay Aktif' : '⚪ Semua Mati',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: isAnyOn ? Colors.green : Colors.grey),
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: isAnyOn ? Colors.green : Colors.grey),
           ),
           const Spacer(),
           if (data != null)
@@ -930,7 +1035,10 @@ class _KontrolScreenState extends State<KontrolScreen> {
       color: Colors.white,
       borderRadius: BorderRadius.circular(10),
       boxShadow: [
-        BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 1)),
+        BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 1)),
       ],
     );
   }

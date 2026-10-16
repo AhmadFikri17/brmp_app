@@ -24,105 +24,124 @@ class AppState extends ChangeNotifier {
 
   // ==================== SERVICES ====================
   MQTTService? _mqttService;
-  
+
   MQTTService get mqttService {
-    _mqttService ??= MQTTService(); // Perbaiki: gunakan null-aware assignment
+    _mqttService ??= MQTTService();
     return _mqttService!;
   }
 
   // ==================== AUTH STATE ====================
   User? _currentUser;
   User? get currentUser => _currentUser;
-  
+
   AppRole _userRole = AppRole.guest;
   AppRole get userRole => _userRole;
-  
+
   bool _isAuthenticated = false;
   bool get isAuthenticated => _isAuthenticated;
 
   // ==================== SENSOR STATE ====================
   SensorData? _currentSensorData;
   SensorData? get currentSensorData => _currentSensorData;
-  
+
   final List<SensorData> _sensorHistory = [];
   List<SensorData> get sensorHistory => _sensorHistory;
-  
+
   static const int maxHistoryLength = 60;
 
   // ==================== RELAY STATE ====================
   final Map<String, RelayModel> _relays = {};
   Map<String, RelayModel> get relays => _relays;
-  
+
+  // ✅ FIX: Default mode = 'otomatis' (sesuai kondisi ESP32 saat nyala)
   final Map<String, String> _relayModes = {
-    '1': 'manual',
-    '2': 'manual',
+    '1': 'otomatis',
+    '2': 'otomatis',
   };
-  
+
   Map<String, String> get relayModes => _relayModes;
 
   // ==================== THRESHOLD STATE ====================
   double _suhuThreshold = 30.0;
   double get suhuThreshold => _suhuThreshold;
-  
+
   double _kelembapanThreshold = 80.0;
   double get kelembapanThreshold => _kelembapanThreshold;
-  
+
   double _cahayaThreshold = 500.0;
   double get cahayaThreshold => _cahayaThreshold;
 
   // ==================== UI STATE ====================
   bool _isLoading = false;
   bool get isLoading => _isLoading;
-  
+
   int _currentNavIndex = 0;
   int get currentNavIndex => _currentNavIndex;
 
   // ==================== INITIALIZATION ====================
   void initialize() {
-    // Inisialisasi relay default
     _relays['1'] = RelayModel(id: '1', name: 'Relay 1');
     _relays['2'] = RelayModel(id: '2', name: 'Relay 2');
-    
-    // Setup MQTT listeners
+
     _setupMqttListeners();
-    
-    // Connect ke MQTT
     _connectMqtt();
   }
 
   void _setupMqttListeners() {
-    // Listen untuk sensor data
+    // Sensor stream
     mqttService.sensorStream.listen((sensorData) {
       _updateSensorData(sensorData);
     });
-    
-    // Listen untuk relay status
+
+    // Relay status stream
     mqttService.relayStream.listen((relayStatus) {
       relayStatus.forEach((relayId, status) {
         _updateRelayStatus(relayId, status);
       });
+    });
+
+    // ✅ BARU: Relay mode stream (dari ESP32)
+    mqttService.relayModeStream.listen((relayModes) {
+      relayModes.forEach((relayId, mode) {
+        _relayModes[relayId] = mode;
+      });
+      notifyListeners();
     });
   }
 
   Future<void> _connectMqtt() async {
     setLoading(true);
     await mqttService.connect();
+
+    // ✅ Sync status & mode terakhir dari MQTTService
+    // (retained message yang sudah tersimpan sebelum listener siap)
+    final lastStatus = mqttService.lastRelayStatus;
+    lastStatus.forEach((relayId, status) {
+      if (_relays.containsKey(relayId)) {
+        _relays[relayId]!.isOn = status;
+        _relays[relayId]!.status = status ? 'ON' : 'OFF';
+      }
+    });
+
+    final lastMode = mqttService.lastRelayMode;
+    lastMode.forEach((relayId, mode) {
+      _relayModes[relayId] = mode;
+    });
+
     setLoading(false);
+    notifyListeners();
   }
 
   // ==================== SENSOR METHODS ====================
   void _updateSensorData(SensorData data) {
     _currentSensorData = data;
     _sensorHistory.add(data);
-    
-    // Batasi history
+
     if (_sensorHistory.length > maxHistoryLength) {
       _sensorHistory.removeAt(0);
     }
-    
-    // Cek auto mode
+
     _checkAutoMode();
-    
     notifyListeners();
   }
 
@@ -135,21 +154,24 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// ✅ Toggle relay lokal — hanya untuk mode MANUAL.
+  /// Publish ke ESP32 dilakukan di UI (`kontrol_screen._sendRelayCommandToESP32`)
+  /// agar topic & payload konsisten.
   void toggleRelay(String relayId) {
     if (_relayModes[relayId] == 'otomatis') {
-      return; // Tidak bisa toggle di mode otomatis
+      debugPrint('⚠️ Cannot toggle $relayId in AUTO mode');
+      return;
     }
-    
+
     if (_relays.containsKey(relayId)) {
       final currentState = _relays[relayId]!.isOn;
       final newState = !currentState;
-      
-      // Publish ke MQTT
-      mqttService.publishRelay(relayId, newState ? 'ON' : 'OFF');
-      
-      // Update state lokal (akan di-sync via MQTT callback)
+
+      // Update state lokal
       _relays[relayId]!.isOn = newState;
       _relays[relayId]!.status = newState ? 'ON' : 'OFF';
+
+      // ❌ JANGAN publish di sini — biar UI yang handle
       notifyListeners();
     }
   }
@@ -162,26 +184,31 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ==================== AUTO MODE ====================
+  // ==================== AUTO MODE (LOGIKA PENGERING) ====================
+  // ✅ Samakan dengan logika ESP32:
+  // ON jika kelembapan > threshold OR suhu > threshold OR cahaya < threshold
   void _checkAutoMode() {
     if (_currentSensorData == null) return;
-    
+
     final data = _currentSensorData!;
-    
-    // Relay 1: Aktif jika suhu > threshold ATAU cahaya < threshold
+
+    final shouldOn = (data.kelembapan > _kelembapanThreshold) ||
+        (data.suhu > _suhuThreshold) ||
+        (data.intensitasCahaya < _cahayaThreshold);
+
+    // Relay 1
     if (_relayModes['1'] == 'otomatis') {
-      final shouldOn = (data.suhu > _suhuThreshold) || 
-                       (data.intensitasCahaya < _cahayaThreshold);
       if (_relays['1']?.isOn != shouldOn) {
-        mqttService.publishRelay('1', shouldOn ? 'ON' : 'OFF');
+        _relays['1']!.isOn = shouldOn;
+        _relays['1']!.status = shouldOn ? 'ON' : 'OFF';
       }
     }
-    
-    // Relay 2: Aktif jika kelembapan < threshold
+
+    // Relay 2
     if (_relayModes['2'] == 'otomatis') {
-      final shouldOn = data.kelembapan < _kelembapanThreshold;
       if (_relays['2']?.isOn != shouldOn) {
-        mqttService.publishRelay('2', shouldOn ? 'ON' : 'OFF');
+        _relays['2']!.isOn = shouldOn;
+        _relays['2']!.status = shouldOn ? 'ON' : 'OFF';
       }
     }
   }
@@ -242,7 +269,7 @@ class AppState extends ChangeNotifier {
   }
 
   String getRelayMode(String relayId) {
-    return _relayModes[relayId] ?? 'manual';
+    return _relayModes[relayId] ?? 'otomatis';
   }
 
   List<double> getSuhuHistory() {
